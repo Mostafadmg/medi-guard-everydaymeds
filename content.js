@@ -692,6 +692,262 @@ function detectActiveTabChanges() {
   });
 }
 
+// ── Inline patient card (below od2-topbar) ────────────────────────────────
+
+function mgEscapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function mgBmiTagClass(bmi) {
+  if (bmi == null) return "slate";
+  if (bmi >= 30) return "green";
+  if (bmi >= 27.5) return "yellow";
+  return "red";
+}
+
+function mgBuildInlinePatientTags(data) {
+  const med = data.medication ? data.medication.replace("® Injectable Pen", "").replace("®", "").trim() : null;
+  let html = "";
+  (data.patientTags || []).forEach((tag) => {
+    const lower = tag.toLowerCase();
+    const cls = lower.includes("new") ? "yellow"
+      : (lower.includes("1st") || lower.includes("first") || lower.includes("transfer")) ? "blue"
+      : "slate";
+    html += `<span class="mg-ipc-tag mg-ipc-tag-${cls}">${mgEscapeHtml(tag)}</span>`;
+  });
+  if (data.gender && data.gender !== "—") {
+    html += `<span class="mg-ipc-tag mg-ipc-tag-slate">${mgEscapeHtml(data.gender)}</span>`;
+  }
+  if (med || data.dose) {
+    html += `<span class="mg-ipc-tag mg-ipc-tag-blue">💊 ${mgEscapeHtml([med, data.dose].filter(Boolean).join(" "))}</span>`;
+  }
+  if (data.bmi != null) {
+    html += `<span class="mg-ipc-tag mg-ipc-tag-${mgBmiTagClass(data.bmi)}">BMI ${data.bmi}</span>`;
+  }
+  if (data.ethnicity && data.ethnicity !== "—") {
+    const ethLow = String(data.ethnicity).toLowerCase();
+    const isBame = /asian|black|african|caribbean|mixed|arab|middle eastern|other ethnic/i.test(ethLow);
+    const ethCls = isBame ? "blue" : "slate";
+    const ethShort = String(data.ethnicity).replace(/\s*\([^)]*\)\s*/g, "").trim();
+    html += `<span class="mg-ipc-tag mg-ipc-tag-${ethCls}" title="Ethnicity: ${mgEscapeHtml(data.ethnicity)}">🌐 ${mgEscapeHtml(ethShort)}</span>`;
+  }
+  if (data.weight && data.weight !== "—") {
+    const kg = parseFloat(String(data.weight).replace(/[^0-9.]/g, ""));
+    let extra = "";
+    if (Number.isFinite(kg) && kg > 0) {
+      const totalLb = kg * 2.2046226218;
+      const stones = Math.floor(totalLb / 14);
+      const lbsRem = Math.round(totalLb - stones * 14);
+      const s = lbsRem === 14 ? stones + 1 : stones;
+      const l = lbsRem === 14 ? 0 : lbsRem;
+      extra = ` <span class="mg-ipc-muted">·</span> ${s} st ${l} lb <span class="mg-ipc-muted">·</span> ${Math.round(totalLb)} lb`;
+    }
+    html += `<span class="mg-ipc-tag mg-ipc-tag-slate">⚖ ${mgEscapeHtml(data.weight)}${extra}</span>`;
+  }
+  if (data.height && data.height !== "—") {
+    html += `<span class="mg-ipc-tag mg-ipc-tag-slate">↕ ${mgEscapeHtml(data.height)}</span>`;
+  }
+  return html;
+}
+
+function mgInjectInlinePatientCardStyles() {
+  if (document.getElementById("mg-inline-patient-card-styles")) return;
+  const style = document.createElement("style");
+  style.id = "mg-inline-patient-card-styles";
+  style.textContent = `
+    #mg-inline-patient-card {
+      margin: 0 0 16px;
+      padding: 0;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    #mg-inline-patient-card .mg-ipc-shell {
+      background: #fff;
+      border: 1px solid #e8e4df;
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
+      padding: 20px 24px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 20px 32px;
+      align-items: start;
+    }
+    #mg-inline-patient-card .mg-ipc-name {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: #1c1917;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin: 0 0 8px;
+    }
+    #mg-inline-patient-card .mg-ipc-dob {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #78716c;
+      font-weight: 500;
+      margin-bottom: 14px;
+    }
+    #mg-inline-patient-card .mg-ipc-age {
+      background: #f5f5f4;
+      color: #57534e;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid #e7e5e4;
+    }
+    #mg-inline-patient-card .mg-ipc-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    #mg-inline-patient-card .mg-ipc-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid;
+      line-height: 1.2;
+    }
+    #mg-inline-patient-card .mg-ipc-tag-green { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+    #mg-inline-patient-card .mg-ipc-tag-yellow { background: #fffbeb; color: #92400e; border-color: #fde68a; }
+    #mg-inline-patient-card .mg-ipc-tag-red { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+    #mg-inline-patient-card .mg-ipc-tag-blue { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
+    #mg-inline-patient-card .mg-ipc-tag-slate { background: #fafaf9; color: #57534e; border-color: #e7e5e4; }
+    #mg-inline-patient-card .mg-ipc-muted { opacity: 0.45; margin: 0 2px; }
+    #mg-inline-patient-card .mg-ipc-right {
+      text-align: right;
+      min-width: 180px;
+    }
+    #mg-inline-patient-card .mg-ipc-submitted {
+      display: inline-block;
+      background: #fafaf9;
+      border: 1px solid #e7e5e4;
+      border-radius: 10px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+    }
+    #mg-inline-patient-card .mg-ipc-submitted-lbl {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #a8a29e;
+    }
+    #mg-inline-patient-card .mg-ipc-submitted-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: #44403c;
+      margin-top: 2px;
+    }
+    #mg-inline-patient-card .mg-ipc-order-num {
+      font-size: 22px;
+      font-weight: 800;
+      color: #1c1917;
+      letter-spacing: -0.02em;
+    }
+    #mg-inline-patient-card .mg-ipc-med {
+      font-size: 15px;
+      font-weight: 600;
+      color: #57534e;
+      margin-top: 4px;
+    }
+    #mg-inline-patient-card .mg-ipc-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid;
+    }
+    #mg-inline-patient-card .mg-ipc-status .dot {
+      width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    }
+    #mg-inline-patient-card .mg-ipc-status-hold { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+    #mg-inline-patient-card .mg-ipc-status-review { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+    #mg-inline-patient-card .mg-ipc-status-default { background: #f5f5f4; color: #57534e; border-color: #e7e5e4; }
+    @media (max-width: 900px) {
+      #mg-inline-patient-card .mg-ipc-shell {
+        grid-template-columns: 1fr;
+      }
+      #mg-inline-patient-card .mg-ipc-right { text-align: left; }
+    }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+function renderInlinePatientCard(data) {
+  const topbar = document.querySelector(".od2-topbar");
+  if (!topbar || !data?.patientName) return;
+
+  mgInjectInlinePatientCardStyles();
+
+  let card = document.getElementById("mg-inline-patient-card");
+  if (!card) {
+    card = document.createElement("div");
+    card.id = "mg-inline-patient-card";
+    topbar.insertAdjacentElement("afterend", card);
+  } else if (card.previousElementSibling !== topbar) {
+    topbar.insertAdjacentElement("afterend", card);
+  }
+
+  const orderNumEl = document.querySelector(".od2-topbar .od2-order-num");
+  const orderDateEl = document.querySelector(".od2-topbar .od2-topbar-date");
+  const statusPill = document.querySelector(".od2-topbar .od2-pill");
+  const orderNum = orderNumEl?.textContent.trim() || (data.orderNo ? `Order #${data.orderNo}` : "");
+  const orderDate = orderDateEl?.textContent.trim() || data.orderDate || "";
+  const statusText = statusPill?.textContent.replace(/\s+/g, " ").trim() || "";
+  const statusCls = /hold/i.test(statusText) ? "hold"
+    : /review|await/i.test(statusText) ? "review" : "default";
+
+  const medLine = [data.medication?.replace("® Injectable Pen", "").replace("®", "").trim(), data.dose]
+    .filter(Boolean).join(" · ");
+
+  const dobParts = [];
+  if (data.dob) dobParts.push(`DOB ${mgEscapeHtml(data.dob)}`);
+  if (data.age != null) dobParts.push(`<span class="mg-ipc-age">${data.age} yrs</span>`);
+
+  card.innerHTML = `
+    <div class="mg-ipc-shell">
+      <div class="mg-ipc-left">
+        <h2 class="mg-ipc-name">${mgEscapeHtml(data.patientName)}</h2>
+        ${dobParts.length ? `<div class="mg-ipc-dob">${dobParts.join(" ")}</div>` : ""}
+        <div class="mg-ipc-tags">${mgBuildInlinePatientTags(data)}</div>
+      </div>
+      <div class="mg-ipc-right">
+        ${orderDate ? `<div class="mg-ipc-submitted"><div class="mg-ipc-submitted-lbl">Submitted</div><div class="mg-ipc-submitted-val">${mgEscapeHtml(orderDate)}</div></div>` : ""}
+        ${orderNum ? `<div class="mg-ipc-order-num">${mgEscapeHtml(orderNum)}</div>` : ""}
+        ${medLine ? `<div class="mg-ipc-med">${mgEscapeHtml(medLine)}</div>` : ""}
+        ${statusText ? `<div class="mg-ipc-status mg-ipc-status-${statusCls}"><span class="dot"></span>${mgEscapeHtml(statusText)}</div>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function ensureInlinePatientCardObserver() {
+  if (window.__mgInlinePatientCardObs) return;
+  window.__mgInlinePatientCardObs = true;
+  const obs = new MutationObserver(() => {
+    const topbar = document.querySelector(".od2-topbar");
+    if (!topbar || document.getElementById("mg-inline-patient-card")) return;
+    if (lastScannedData?.patientName) renderInlinePatientCard(lastScannedData);
+  });
+  const start = () => {
+    if (document.body) obs.observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) start();
+  else document.addEventListener("DOMContentLoaded", start, { once: true });
+}
+
 // ── Initial scan ──────────────────────────────────────────────────────────
 
 function performScan() {
@@ -700,6 +956,9 @@ function performScan() {
 
   const data = scrapeOrderData();
   lastScannedData = data;
+
+  renderInlinePatientCard(data);
+  ensureInlinePatientCardObserver();
 
   chrome.runtime.sendMessage({
     type: "ORDER_DATA_SCANNED",

@@ -356,9 +356,59 @@ function updateProgress(completion) {
   const done = [...TABS_WITH_DONE].filter(t => completion[t]).length;
   const total = TABS_WITH_DONE.size;
   const pct = Math.round((done / total) * 100);
-  document.getElementById("pg-fill").style.width = pct + "%";
-  document.getElementById("pg-label").textContent = `${done} of ${total} steps complete`;
-  document.getElementById("pg-pct").textContent = pct + "%";
+  const fill = document.getElementById("pg-fill");
+  const label = document.getElementById("pg-label");
+  const pctEl = document.getElementById("pg-pct");
+  if (fill) fill.style.width = pct + "%";
+  if (label) label.textContent = `${done} of ${total} steps complete`;
+  if (pctEl) pctEl.textContent = pct + "%";
+}
+
+function applyWorkflowStepsVisibility(show) {
+  const section = document.getElementById("workflow-steps-section");
+  if (!section) return;
+  section.classList.toggle("is-hidden", !show);
+  if (!show) setWorkflowStepsOpen(false);
+}
+
+function setWorkflowStepsOpen(open) {
+  const section = document.getElementById("workflow-steps-section");
+  const toggle = document.getElementById("progress-wrap-toggle");
+  if (!section || !toggle) return;
+  section.classList.toggle("is-open", open);
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function initWorkflowStepsPanel() {
+  const section = document.getElementById("workflow-steps-section");
+  const toggle = document.getElementById("progress-wrap-toggle");
+  if (!section || !toggle) return;
+
+  const closeSteps = () => setWorkflowStepsOpen(false);
+  const toggleSteps = () => setWorkflowStepsOpen(!section.classList.contains("is-open"));
+
+  toggle.addEventListener("click", toggleSteps);
+  toggle.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleSteps();
+    }
+    if (e.key === "Escape") closeSteps();
+  });
+
+  try {
+    chrome.storage.sync.get({ show_workflow_steps: true }, (r) => {
+      applyWorkflowStepsVisibility(r.show_workflow_steps !== false);
+    });
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "sync" || !changes.show_workflow_steps) return;
+      applyWorkflowStepsVisibility(changes.show_workflow_steps.newValue !== false);
+    });
+  } catch (_) {
+    applyWorkflowStepsVisibility(true);
+  }
+
+  setWorkflowStepsOpen(false);
 }
 
 // ═══════════════════════════════════════════════
@@ -1520,6 +1570,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-bulk-approve")?.addEventListener("click", bulkApproveOrUndo);
   document.getElementById("btn-issue-rx")?.addEventListener("click", issueRx);
   initScrModeToggles();
+  initWorkflowStepsPanel();
   document.getElementById("btn-place-hold")?.addEventListener("click", placeOnHold);
 
   chrome.runtime.onMessage.addListener(msg => {

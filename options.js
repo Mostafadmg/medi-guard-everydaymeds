@@ -189,7 +189,7 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get(
     ["server_url", "openai_key", "assistant_id", "initialized",
      "default_scr_text", "default_scr_accessed_text", "default_counselling_text", "default_rationale_text", "default_hold_reason",
-     "quick_comment_buttons", "quick_hold_buttons", "email_macros", "ui_zoom"],
+     "quick_comment_buttons", "quick_hold_buttons", "email_macros", "ui_zoom", "show_workflow_steps"],
     (syncResult) => { chrome.storage.local.get(["email_macros", "email_macros_version"], (localResult) => {
       const result = Object.assign({}, syncResult, {
         email_macros: localResult.email_macros,
@@ -210,6 +210,8 @@ document.addEventListener("DOMContentLoaded", () => {
       counsellingInput.value = result.default_counselling_text || BUILTIN_COUNSELLING;
       rationaleInput.value = result.default_rationale_text || BUILTIN_RATIONALE;
       if (holdInput) holdInput.value = result.default_hold_reason || BUILTIN_HOLD;
+      const showStepsInput = document.getElementById("showWorkflowSteps");
+      if (showStepsInput) showStepsInput.checked = result.show_workflow_steps !== false;
       const qcSaved = Array.isArray(result.quick_comment_buttons) ? result.quick_comment_buttons : null;
       qcMgr.render(qcSaved && qcSaved.length ? qcSaved : BUILTIN_QUICK_COMMENTS);
       const qhSaved = Array.isArray(result.quick_hold_buttons) ? result.quick_hold_buttons : null;
@@ -253,6 +255,8 @@ document.addEventListener("DOMContentLoaded", () => {
     counsellingInput.value = BUILTIN_COUNSELLING;
     rationaleInput.value = BUILTIN_RATIONALE;
     if (holdInput) holdInput.value = BUILTIN_HOLD;
+    const showStepsInput = document.getElementById("showWorkflowSteps");
+    if (showStepsInput) showStepsInput.checked = true;
   });
 
   saveBtn.addEventListener("click", () => {
@@ -264,6 +268,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const counsellingText = counsellingInput.value.trim();
     const rationaleText = rationaleInput.value.trim();
     const holdText = (holdInput?.value || "").trim();
+    const showWorkflowSteps = document.getElementById("showWorkflowSteps")?.checked !== false;
 
     if (!serverUrl && !key) {
       statusDiv.textContent = "⚠️ Please enter a Server URL or API key.";
@@ -283,6 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
       default_hold_reason: holdText || BUILTIN_HOLD,
       quick_comment_buttons: qcMgr.read(),
       quick_hold_buttons: qhMgr.read(),
+      show_workflow_steps: showWorkflowSteps,
       ui_zoom: (() => {
         const el = document.getElementById("uiZoom");
         let z = parseInt(el && el.value, 10);

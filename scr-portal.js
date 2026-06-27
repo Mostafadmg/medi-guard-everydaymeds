@@ -54,10 +54,12 @@
   btn.addEventListener("click", () => {
     btn.disabled = true;
     try {
-      chrome.runtime.sendMessage({ type: "SCR_CLOSE_AND_RETURN" }, () => {
-        void chrome.runtime.lastError;
+      chrome.runtime.sendMessage({ type: "SCR_CLOSE_AND_RETURN" }, (resp) => {
+        if (chrome.runtime.lastError || !resp?.success) btn.disabled = false;
       });
-    } catch (_) {}
+    } catch (_) {
+      btn.disabled = false;
+    }
   });
 
   const mount = () => {

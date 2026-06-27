@@ -257,11 +257,32 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       background: var(--white); border: 1px solid var(--border);
       border-radius: 14px; padding: 16px 18px;
       box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s ease, box-shadow 0.15s ease;
     }
+    .progress-wrap:hover { background: rgba(5, 150, 105, 0.03); }
+    .progress-wrap:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     .progress-top {
       display: flex; justify-content: space-between;
       align-items: center; margin-bottom: 11px;
     }
+    .progress-right {
+      display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+    }
+    .progress-chev {
+      width: 14px; height: 14px; color: var(--slate-light);
+      transition: transform 0.2s ease; flex-shrink: 0;
+    }
+    .workflow-steps-section.is-open .progress-chev { transform: rotate(180deg); }
+    .workflow-steps-section #steps-list {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .workflow-steps-section.is-open #steps-list { display: flex; }
+    .workflow-steps-section.is-hidden { display: none !important; }
     .progress-label { font-size: 12px; font-weight: 600; color: var(--slate-mid); letter-spacing: -0.005em; }
     .progress-pct {
       font-size: 13px; font-weight: 800; color: var(--green);
@@ -951,16 +972,21 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       <button class="btn-scan" id="scan-btn">Scan Page</button>
     </div>
     <div id="wf-content" style="display:none; flex:1; padding:12px; flex-direction:column; gap:8px;">
-      <div class="progress-wrap">
-        <div class="progress-top">
-          <div class="progress-label" id="pg-label">0 of 6 steps complete</div>
-          <div class="progress-pct" id="pg-pct">0%</div>
+      <div class="workflow-steps-section" id="workflow-steps-section">
+        <div class="progress-wrap" id="progress-wrap-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="steps-list" title="Show / hide prescription steps">
+          <div class="progress-top">
+            <div class="progress-label" id="pg-label">0 of 6 steps complete</div>
+            <div class="progress-right">
+              <div class="progress-pct" id="pg-pct">0%</div>
+              <svg class="progress-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="pg-fill" style="width:0%"></div>
+          </div>
         </div>
-        <div class="progress-track">
-          <div class="progress-fill" id="pg-fill" style="width:0%"></div>
-        </div>
+        <div id="steps-list"></div>
       </div>
-      <div id="steps-list"></div>
       <button id="btn-bulk-approve" class="btn-bulk" type="button">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         <span>Approve all</span>

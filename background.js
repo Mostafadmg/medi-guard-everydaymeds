@@ -20,6 +20,103 @@ chrome.runtime.onInstalled.addListener(() => {
 // ── NHS SCR session — track tabs opened after "Go to NHS SCR" ───────────────
 const SCR_SESSION_KEY = "scrSession";
 const SCR_TRACK_MS = 10 * 60 * 1000;
+const RX_ORDER_RE = /rx\.everydaymeds\.co\.uk\/order\//i;
+
+function tabGet(tabId) {
+  return new Promise((resolve) => {
+    chrome.tabs.get(tabId, (tab) => {
+      if (chrome.runtime.lastError) resolve(null);
+      else resolve(tab);
+    });
+  });
+}
+
+function tabsQuery(query) {
+  return new Promise((resolve) => {
+    chrome.tabs.query(query, (tabs) => resolve(tabs || []));
+  });
+}
+
+function tabUpdate(tabId, props) {
+  return new Promise((resolve) => {
+    chrome.tabs.update(tabId, props, (tab) => {
+      void chrome.runtime.lastError;
+      resolve(tab || null);
+    });
+  });
+}
+
+function tabsRemove(tabIds) {
+  return new Promise((resolve) => {
+    if (!tabIds.length) { resolve(); return; }
+    chrome.tabs.remove(tabIds, () => {
+      void chrome.runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+function windowUpdate(windowId, props) {
+  return new Promise((resolve) => {
+    chrome.windows.update(windowId, props, () => {
+      void chrome.runtime.lastError;
+      resolve();
+    });
+  });
+}
+
+function orderPathname(url) {
+  try { return new URL(url).pathname; } catch { return null; }
+}
+
+function isScrWorkflowTab(url) {
+  if (!url) return false;
+  return /portal\.spineservices\.nhs\.uk\/nationalcarerecordsservice/i.test(url)
+    || /keywords-tool\.html/i.test(url);
+}
+
+async function findExistingRxTab(returnTabId, returnUrl, windowId) {
+  if (returnTabId) {
+    const tab = await tabGet(returnTabId);
+    if (tab?.id && tab.url && RX_ORDER_RE.test(tab.url)) return tab.id;
+  }
+  const wantPath = returnUrl ? orderPathname(returnUrl) : null;
+  if (windowId != null) {
+    const tabs = await tabsQuery({ windowId });
+    if (wantPath) {
+      for (const tab of tabs) {
+        if (tab.id && tab.url && RX_ORDER_RE.test(tab.url) && orderPathname(tab.url) === wantPath) {
+          return tab.id;
+        }
+      }
+    }
+    for (const tab of tabs) {
+      if (tab.id && tab.url && RX_ORDER_RE.test(tab.url)) return tab.id;
+    }
+  }
+  try {
+    const matches = await tabsQuery({ url: "https://rx.everydaymeds.co.uk/order/*" });
+    if (wantPath) {
+      const exact = matches.find((t) => t.id && orderPathname(t.url) === wantPath);
+      if (exact?.id) return exact.id;
+    }
+    return matches[0]?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function collectScrTabsToClose(windowId, trackedIds, senderTabId, rxTabId) {
+  const toClose = new Set(Array.isArray(trackedIds) ? trackedIds : []);
+  if (senderTabId) toClose.add(senderTabId);
+  const tabs = windowId != null ? await tabsQuery({ windowId }) : await tabsQuery({});
+  for (const tab of tabs) {
+    if (!tab.id || tab.id === rxTabId) continue;
+    if (isScrWorkflowTab(tab.url)) toClose.add(tab.id);
+  }
+  if (rxTabId) toClose.delete(rxTabId);
+  return [...toClose];
+}
 
 async function getScrSession() {
   const r = await chrome.storage.session.get(SCR_SESSION_KEY);
@@ -53,7 +150,21 @@ async function addOpenedTab(tabId) {
   }
 }
 
+async function inferScrSessionFromNewTab(tab) {
+  if (!tab?.id || tab.windowId == null) return;
+  const session = await getScrSession();
+  if (session) return;
+  const url = tab.pendingUrl || tab.url || "";
+  if (!/portal\.spineservices\.nhs\.uk/i.test(url)) return;
+  const tabs = await tabsQuery({ windowId: tab.windowId });
+  const rxTab = tabs.find((t) => t.id !== tab.id && t.url && RX_ORDER_RE.test(t.url));
+  if (!rxTab?.id) return;
+  await startScrSession(rxTab.id, rxTab.url, tab.windowId);
+  await addOpenedTab(tab.id);
+}
+
 chrome.tabs.onCreated.addListener((tab) => {
+  inferScrSessionFromNewTab(tab);
   getScrSession().then((session) => {
     if (!session || !tab.id) return;
     if (Date.now() - session.startedAt > SCR_TRACK_MS) return;
@@ -84,29 +195,30 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   addOpenedTab(tabId);
 });
 
-async function closeScrAndReturn() {
+async function closeScrAndReturn(senderTabId) {
   const session = await getScrSession();
-  if (!session) return { success: false, error: "No SCR session" };
+  const senderTab = senderTabId ? await tabGet(senderTabId) : null;
+  let windowId = session?.windowId ?? senderTab?.windowId ?? null;
+  const returnTabId = session?.returnTabId ?? null;
+  const returnUrl = session?.returnUrl ?? null;
+  const tracked = session?.openedTabIds ?? [];
 
-  const { returnTabId, returnUrl, openedTabIds } = session;
-  await setScrSession(null);
+  const rxTabId = await findExistingRxTab(returnTabId, returnUrl, windowId);
+  if (session) await setScrSession(null);
 
-  try {
-    await chrome.tabs.update(returnTabId, { active: true });
-  } catch {
-    try {
-      await chrome.tabs.create({ url: returnUrl, active: true });
-    } catch (_) {}
+  if (rxTabId) {
+    await tabUpdate(rxTabId, { active: true });
+    const rxTab = await tabGet(rxTabId);
+    if (rxTab?.windowId != null) {
+      windowId = rxTab.windowId;
+      await windowUpdate(rxTab.windowId, { focused: true });
+    }
   }
 
-  const toClose = [...new Set(openedTabIds)].filter((id) => id !== returnTabId);
-  if (toClose.length) {
-    try {
-      await chrome.tabs.remove(toClose);
-    } catch (_) {}
-  }
+  const idsToRemove = await collectScrTabsToClose(windowId, tracked, senderTabId, rxTabId);
+  await tabsRemove(idsToRemove);
 
-  return { success: true };
+  return { success: true, activatedTabId: rxTabId || null, closedCount: idsToRemove.length };
 }
 
 // Forward messages from content script to side panel
@@ -147,7 +259,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "SCR_CLOSE_AND_RETURN") {
-    closeScrAndReturn()
+    closeScrAndReturn(sender.tab && sender.tab.id)
       .then(sendResponse)
       .catch((e) => sendResponse({ success: false, error: e && e.message }));
     return true;
