@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "MediGuard AI — EverydayMeds",
+  "version": "1.0",
+  "description": "AI-powered clinical decision support for GLP-1 prescribing on EverydayMeds. Step-by-step workflow dashboard with tab completion.",
+  "permissions": [
+    "sidePanel",
+    "activeTab",
+    "scripting",
+    "storage",
+    "windows",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://rx.everydaymeds.co.uk/*",
+    "https://portal.spineservices.nhs.uk/*",
+    "https://*.replit.app/*",
+    "https://*.replit.dev/*",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "Open MediGuard Workflow Dashboard"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://rx.everydaymeds.co.uk/*",
+        "https://*.replit.app/*",
+        "https://*.replit.dev/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/*"
+      ],
+      "js": ["scr-portal.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

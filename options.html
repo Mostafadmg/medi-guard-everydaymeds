@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>MediGuard AI — EverydayMeds Settings</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 40px;
+      max-width: 680px;
+      margin: 0 auto;
+      background: #f8fafc;
+      color: #334155;
+    }
+    h1 {
+      font-size: 22px;
+      color: #0f172a;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 0;
+    }
+    .card {
+      background: white;
+      padding: 22px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      margin-top: 18px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .card h2 {
+      margin: 0 0 14px;
+      font-size: 15px;
+      color: #0f172a;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #0f172a;
+      font-size: 13px;
+    }
+    input[type="text"], input[type="password"], textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 8px;
+      box-sizing: border-box;
+      font-family: inherit;
+    }
+    input:focus, textarea:focus {
+      outline: none;
+      border-color: #059669;
+      box-shadow: 0 0 0 2px rgba(5,150,105,0.1);
+    }
+    .help {
+      font-size: 12px;
+      color: #64748b;
+      line-height: 1.5;
+      margin-bottom: 4px;
+    }
+    .help a { color: #059669; }
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+    .badge-rec { background: #d1fae5; color: #065f46; }
+    .badge-opt { background: #f1f5f9; color: #64748b; }
+    button[type="button"], .save-btn {
+      background: #059669;
+      color: white;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      font-size: 14px;
+      margin-top: 4px;
+    }
+    button:hover { background: #047857; }
+    .status {
+      margin-top: 12px;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 8px 12px;
+      border-radius: 4px;
+    }
+    .success { color: #166534; background: #dcfce7; }
+    .info-box {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 6px;
+      padding: 14px;
+      margin-top: 18px;
+      font-size: 13px;
+      color: #065f46;
+      line-height: 1.6;
+    }
+    .info-box strong { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    MediGuard AI — EverydayMeds Settings
+  </h1>
+
+  <div class="card">
+    <h2>Server URL <span class="badge badge-rec">Recommended</span></h2>
+    <label for="serverUrl">MediGuard Server URL</label>
+    <input type="text" id="serverUrl" placeholder="https://your-app.replit.app" />
+    <div class="help">Connect to the MediGuard server for AI analysis. No API key needed — the server handles everything securely.</div>
+  </div>
+
+  <div class="card">
+    <h2>OpenAI API Key <span class="badge badge-opt">Optional fallback</span></h2>
+    <label for="apiKey">API Key</label>
+    <input type="password" id="apiKey" placeholder="sk-proj-..." />
+    <div class="help">Only needed if you don't have a server URL. Get one at <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></div>
+  </div>
+
+  <div class="card">
+    <h2>Custom Assistant ID <span class="badge badge-opt">Optional</span></h2>
+    <label for="assistantId">Assistant ID</label>
+    <input type="text" id="assistantId" placeholder="asst_abc123..." />
+    <div class="help">If you've created a custom GPT Assistant with uploaded SOPs, paste its ID here.</div>
+  </div>
+
+  <div class="card">
+    <h2>Approval Drawer Defaults <span class="badge badge-opt">Editable</span></h2>
+    <div class="help">These are the texts that auto-fill in the pharmacy's Approve &amp; Issue Rx drawer. Edit them to match your preferred wording. They take effect immediately on every new prescription approval.</div>
+
+    <label for="scrAccessedText" style="margin-top:12px;">SCR — "Accessed" summary</label>
+    <textarea id="scrAccessedText" rows="2" placeholder="SCR accessed and checked no contraindication found or any concerns, happy to continue."></textarea>
+    <div class="help">Fills the SCR Summary box when SCR Accessed is selected in step 1.</div>
+
+    <label for="scrText" style="margin-top:12px;">SCR — "Not Accessed" reason</label>
+    <textarea id="scrText" rows="2" placeholder="SCR not available, information provided by the patient."></textarea>
+    <div class="help">Fills the reason box when SCR Not Accessed is selected in step 1.</div>
+
+    <label for="counsellingText" style="margin-top:12px;">Communication summary (counselling)</label>
+    <textarea id="counsellingText" rows="3" placeholder="Patient has been contacted by email and provided counselling and information on their treatment. Patient can contact us at any time if they need further help or information."></textarea>
+    <div class="help">Fills the "Communication summary" field in step 1 after picking Secure Message.</div>
+
+    <label for="rationaleText" style="margin-top:12px;">Final approval rationale</label>
+    <textarea id="rationaleText" rows="5" placeholder="The patient meets the service eligibility criteria. The consultation responses, medical history, current medication, allergies and supporting documentation have been reviewed. No known contraindications, clinically significant interactions, red flags or other concerns have been identified."></textarea>
+    <div class="help">The default rationale in step 2. Anything you type into the sidepanel "comment" box is appended below this on a new line.</div>
+
+    <label for="holdReasonText" style="margin-top:12px;">Default "Place on hold" reason</label>
+    <textarea id="holdReasonText" rows="2" placeholder="Waiting for patient to upload documents."></textarea>
+    <div class="help">Used by the amber "Place on hold" button in the sidepanel. Anything you type into the sidepanel "Hold reason" box is appended below this on a new line.</div>
+
+    <button type="button" id="resetDefaults" style="background:#64748b; margin-top:4px; padding:8px 14px; font-size:12px;">Reset to built-in defaults</button>
+  </div>
+
+  <div class="card">
+    <h2>Quick comment buttons <span class="badge badge-opt">Editable</span></h2>
+    <div class="help">
+      Add chip buttons that show up above the "Your comment" textarea in the side panel.
+      Click a chip there and its text drops straight into the comment box — so you don't
+      have to retype the same rationale on every prescription.
+    </div>
+    <div id="quickCommentsList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
+    <button type="button" id="addQuickComment" style="background:#1e40af; margin-top:10px; padding:8px 14px; font-size:12px;">
+      + Add button
+    </button>
+    <button type="button" id="resetQuickComments" style="background:#64748b; margin-top:10px; margin-left:8px; padding:8px 14px; font-size:12px;">
+      Reset to default
+    </button>
+  </div>
+
+  <div class="card">
+    <h2>Quick hold-reason buttons <span class="badge badge-opt">Editable</span></h2>
+    <div class="help">
+      Add chip buttons that show up above the "Hold reason" textarea in the side panel.
+      Same idea as the comment chips above, but for the orange "Place on hold" flow.
+    </div>
+    <div id="quickHoldsList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
+    <button type="button" id="addQuickHold" style="background:#92400e; margin-top:10px; padding:8px 14px; font-size:12px;">
+      + Add button
+    </button>
+    <button type="button" id="resetQuickHolds" style="background:#64748b; margin-top:10px; margin-left:8px; padding:8px 14px; font-size:12px;">
+      Reset to default
+    </button>
+    <style>
+      .qc-row {
+        display: grid; grid-template-columns: 160px 1fr auto; gap: 8px;
+        align-items: start;
+        padding: 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+      }
+      .qc-row input[type="text"], .qc-row textarea {
+        margin-bottom: 0;
+      }
+      .qc-row .qc-del {
+        background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;
+        padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+        cursor: pointer; height: fit-content;
+      }
+      .qc-row .qc-del:hover { background: #fecaca; }
+      .qc-empty {
+        color: #94a3b8; font-size: 13px; text-align: center; padding: 16px;
+        background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 6px;
+      }
+    </style>
+  </div>
+
+  <div class="card">
+    <h2>Email templates <span class="badge badge-opt">Editable</span></h2>
+    <div class="help">
+      Email macros that show up in the side panel under "Email to Patient".
+      Give each template a title and write the body — line breaks, blank lines
+      and indentation are all preserved when you copy it. Use the token
+      <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">{patient_name}</code>
+      anywhere in the body and it will be replaced with the current patient's
+      name automatically.
+    </div>
+    <div id="emailMacrosList" style="display:flex; flex-direction:column; gap:10px; margin-top:14px;"></div>
+    <button type="button" id="addEmailMacro" style="background:#7c3aed; margin-top:10px; padding:8px 14px; font-size:12px;">
+      + Add template
+    </button>
+    <button type="button" id="resetEmailMacros" style="background:#64748b; margin-top:10px; margin-left:8px; padding:8px 14px; font-size:12px;">
+      Reset to default
+    </button>
+    <style>
+      #emailMacrosList .qc-row { grid-template-columns: 180px 1fr auto; }
+      #emailMacrosList .qc-row textarea { min-height: 120px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.5; }
+    </style>
+  </div>
+
+  <div class="section">
+    <h2>🔍 Extension Zoom</h2>
+    <p class="description">Adjust how big the sidepanel UI appears. Useful on high-DPI displays where the panel looks tiny.</p>
+    <label for="uiZoom" style="margin-top:12px; display:flex; align-items:center; gap:10px;">
+      <span>UI Zoom</span>
+      <input type="range" id="uiZoom" min="80" max="200" step="5" value="100" style="flex:1;" />
+      <span id="uiZoomValue" style="min-width:48px; text-align:right; font-weight:700; color:#7c3aed;">100%</span>
+    </label>
+  </div>
+
+  <button class="save-btn" id="save">Save Settings</button>
+  <div id="status" class="status"></div>
+
+  <div class="info-box">
+    <strong>EverydayMeds Extension</strong><br>
+    This extension adds a step-by-step prescription workflow dashboard to rx.everydaymeds.co.uk. It reads the Clinical Review, Consultation, Documents and other tabs to check GLP-1 SOP compliance, and lets you mark each step as done — automatically navigating to the next tab.
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
