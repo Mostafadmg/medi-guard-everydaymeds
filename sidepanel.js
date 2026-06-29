@@ -859,6 +859,46 @@ async function copyEmailBody() {
   if (ok) toast("Email copied — paste into your mail client", "success", 1800);
 }
 
+function showEmptyEmailModal() {
+  const modal = document.getElementById("mg-empty-email-modal");
+  if (!modal) return;
+  modal.classList.add("is-open");
+  modal.setAttribute("aria-hidden", "false");
+}
+
+function hideEmptyEmailModal() {
+  const modal = document.getElementById("mg-empty-email-modal");
+  if (!modal) return;
+  modal.classList.remove("is-open");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+async function emailPatient() {
+  const body = document.getElementById("email-body");
+  const btn  = document.getElementById("btn-email-patient");
+  if (!body) return;
+  const text = (body.value || "").trim();
+  if (!text) {
+    showEmptyEmailModal();
+    return;
+  }
+
+  const message = substituteEmail(body.value);
+  if (btn) btn.disabled = true;
+  try {
+    const resp = await msgContent({ type: "SEND_PATIENT_MESSAGE", text: message });
+    if (resp?.success) {
+      toast("Message sent to patient", "success", 2200);
+    } else {
+      toast(resp?.error || "Could not send message", "error");
+    }
+  } catch {
+    toast("Could not connect — open the order page first", "error");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // Re-render whenever the user saves new buttons in the options page.
 try {
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -876,6 +916,12 @@ renderEmailMacros();
 document.addEventListener("DOMContentLoaded", () => {
   const cb = document.getElementById("btn-copy-email");
   if (cb) cb.addEventListener("click", copyEmailBody);
+  const ep = document.getElementById("btn-email-patient");
+  if (ep) ep.addEventListener("click", emailPatient);
+  const emptyOk = document.getElementById("mg-empty-email-ok");
+  const emptyBackdrop = document.getElementById("mg-empty-email-backdrop");
+  if (emptyOk) emptyOk.addEventListener("click", hideEmptyEmailModal);
+  if (emptyBackdrop) emptyBackdrop.addEventListener("click", hideEmptyEmailModal);
 }, { once: true });
 
 // ── SCR mode toggles (mutually exclusive) ──

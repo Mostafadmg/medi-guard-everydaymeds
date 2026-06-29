@@ -292,6 +292,67 @@ async function rxPlaceOnHold(reason, docs) {
   }
 }
 
+// Send a free-text message to the patient via the on-page encrypted chat composer.
+async function sendPatientChatMessage(text) {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  try {
+    const message = (text || "").trim();
+    if (!message) return { success: false, error: "Message is empty" };
+
+    const panel = document.getElementById("od2ChatPanel");
+    const fab = document.getElementById("od2ChatFab");
+    const panelOpen = panel && panel.classList.contains("is-open") && panel.getAttribute("aria-hidden") !== "true";
+    if (!panelOpen && fab) fab.click();
+
+    let input = null;
+    for (let i = 0; i < 24; i++) {
+      await sleep(100);
+      input = document.getElementById("od2CommsInput");
+      if (input && input.offsetParent !== null) break;
+    }
+    if (!input) return { success: false, error: "Patient chat composer not found" };
+
+    const closedNotice = document.getElementById("od2CommsClosedNotice");
+    const chatClosed = closedNotice && closedNotice.offsetParent !== null;
+    if (chatClosed) {
+      const startBtn = document.getElementById("od2ChatToggleBtn");
+      if (startBtn && /start chat/i.test(startBtn.textContent || "")) startBtn.click();
+      await sleep(250);
+    }
+
+    setFieldValue(input, message);
+    input.focus();
+
+    let sendBtn = null;
+    for (let i = 0; i < 20; i++) {
+      await sleep(80);
+      sendBtn = document.getElementById("od2CommsSendBtn");
+      if (sendBtn && !sendBtn.disabled) break;
+    }
+    if (!sendBtn) return { success: false, error: "Send button not found" };
+    if (sendBtn.disabled) return { success: false, error: "Send button is disabled — start the chat on the page first" };
+
+    await sleep(120);
+    try {
+      sendBtn.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+      sendBtn.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      sendBtn.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
+      sendBtn.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    } catch {}
+    sendBtn.click();
+
+    await sleep(400);
+    const swalRes = await autoConfirmSwal(2000);
+    if (swalRes.appeared && !swalRes.closed) {
+      return { success: false, error: "Send confirmation did not complete" };
+    }
+
+    return { success: true, message: "Message sent to patient" };
+  } catch (e) {
+    return { success: false, error: e?.message || "Send failed" };
+  }
+}
+
 function calculateAge(dobString) {
   if (!dobString) return null;
   let dob;
@@ -379,8 +440,11 @@ function scrapeOrderData() {
   if (nameEl) data.patientName = nameEl.textContent.trim();
   const dobEl = document.querySelector('.od2-patient-card [data-meta="dob"]');
   if (dobEl) {
-    data.dob = dobEl.textContent.trim();
-    data.age = calculateAge(data.dob);
+    const dob = dobEl.textContent.trim();
+    if (dob && dob !== "—") {
+      data.dob = dob;
+      data.age = calculateAge(data.dob);
+    }
   }
   document.querySelectorAll(".od2-patient-tags .od2-tag").forEach(t => {
     const label = t.textContent.trim().replace(/\s+/g, " ");
@@ -692,7 +756,81 @@ function detectActiveTabChanges() {
   });
 }
 
-// ── Inline patient card (below od2-topbar) ────────────────────────────────
+// ── Inline patient card (directly below od2-topbar) ───────────────────────
+
+function mgFixInlinePatientCardLayoutAncestors(slot) {
+  let el = slot.parentElement;
+  while (el && el !== document.body) {
+    const ps = getComputedStyle(el);
+    if (ps.display.includes("flex") && ps.flexDirection !== "column" && ps.flexWrap === "nowrap") {
+      el.style.flexWrap = "wrap";
+    }
+    if (ps.display.includes("grid")) {
+      slot.style.gridColumn = "1 / -1";
+    }
+    el = el.parentElement;
+  }
+}
+
+function mgSyncInlinePatientCardLayout() {
+  const wrap = document.querySelector(".od2-wrap");
+  const slot = document.getElementById("mg-inline-patient-card-slot");
+  const shell = document.querySelector("#mg-inline-patient-card .mg-ipc-shell");
+  if (!wrap || !slot || !shell) return;
+
+  const card = document.getElementById("mg-inline-patient-card");
+  if (card) {
+    card.style.width = "";
+    card.style.maxWidth = "";
+    card.style.marginLeft = "";
+    card.style.marginRight = "";
+  }
+
+  mgFixInlinePatientCardLayoutAncestors(slot);
+
+  const wrapRect = wrap.getBoundingClientRect();
+  const slotRect = slot.getBoundingClientRect();
+  const width = Math.round(wrapRect.width);
+  const leftOffset = Math.max(0, Math.round(wrapRect.left - slotRect.left));
+
+  shell.style.width = `${width}px`;
+  shell.style.maxWidth = `${width}px`;
+  shell.style.marginLeft = `${leftOffset}px`;
+  shell.style.marginRight = "auto";
+  shell.style.boxSizing = "border-box";
+}
+
+function mgEnsureInlinePatientCardSlot(topbar, wrap) {
+  let slot = document.getElementById("mg-inline-patient-card-slot");
+  if (!slot) {
+    slot = document.createElement("div");
+    slot.id = "mg-inline-patient-card-slot";
+    topbar.insertAdjacentElement("afterend", slot);
+  } else if (topbar.nextElementSibling !== slot) {
+    topbar.insertAdjacentElement("afterend", slot);
+  }
+
+  mgFixInlinePatientCardLayoutAncestors(slot);
+  return slot;
+}
+
+function mgEnsureInlinePatientCardLayoutSync() {
+  if (window.__mgInlinePatientCardLayoutSync) return;
+  window.__mgInlinePatientCardLayoutSync = true;
+
+  const sync = () => mgSyncInlinePatientCardLayout();
+  window.addEventListener("resize", sync, { passive: true });
+
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(sync);
+    const watch = () => {
+      const wrap = document.querySelector(".od2-wrap");
+      if (wrap) ro.observe(wrap);
+    };
+    watch();
+    new MutationObserver(watch).observe(document.body, { childList: true, subtree: true });
+  }
+}
 
 function mgEscapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -707,29 +845,30 @@ function mgBmiTagClass(bmi) {
 
 function mgBuildInlinePatientTags(data) {
   const med = data.medication ? data.medication.replace("® Injectable Pen", "").replace("®", "").trim() : null;
-  let html = "";
+  let primary = "";
+  let vitals = "";
   (data.patientTags || []).forEach((tag) => {
     const lower = tag.toLowerCase();
     const cls = lower.includes("new") ? "yellow"
       : (lower.includes("1st") || lower.includes("first") || lower.includes("transfer")) ? "blue"
       : "slate";
-    html += `<span class="mg-ipc-tag mg-ipc-tag-${cls}">${mgEscapeHtml(tag)}</span>`;
+    primary += `<span class="mg-ipc-tag mg-ipc-tag-${cls}">${mgEscapeHtml(tag)}</span>`;
   });
   if (data.gender && data.gender !== "—") {
-    html += `<span class="mg-ipc-tag mg-ipc-tag-slate">${mgEscapeHtml(data.gender)}</span>`;
+    primary += `<span class="mg-ipc-tag mg-ipc-tag-slate">${mgEscapeHtml(data.gender)}</span>`;
   }
   if (med || data.dose) {
-    html += `<span class="mg-ipc-tag mg-ipc-tag-blue">💊 ${mgEscapeHtml([med, data.dose].filter(Boolean).join(" "))}</span>`;
+    primary += `<span class="mg-ipc-tag mg-ipc-tag-blue">💊 ${mgEscapeHtml([med, data.dose].filter(Boolean).join(" "))}</span>`;
   }
   if (data.bmi != null) {
-    html += `<span class="mg-ipc-tag mg-ipc-tag-${mgBmiTagClass(data.bmi)}">BMI ${data.bmi}</span>`;
+    primary += `<span class="mg-ipc-tag mg-ipc-tag-${mgBmiTagClass(data.bmi)}">BMI ${data.bmi}</span>`;
   }
   if (data.ethnicity && data.ethnicity !== "—") {
     const ethLow = String(data.ethnicity).toLowerCase();
     const isBame = /asian|black|african|caribbean|mixed|arab|middle eastern|other ethnic/i.test(ethLow);
     const ethCls = isBame ? "blue" : "slate";
     const ethShort = String(data.ethnicity).replace(/\s*\([^)]*\)\s*/g, "").trim();
-    html += `<span class="mg-ipc-tag mg-ipc-tag-${ethCls}" title="Ethnicity: ${mgEscapeHtml(data.ethnicity)}">🌐 ${mgEscapeHtml(ethShort)}</span>`;
+    primary += `<span class="mg-ipc-tag mg-ipc-tag-${ethCls}" title="Ethnicity: ${mgEscapeHtml(data.ethnicity)}">🌐 ${mgEscapeHtml(ethShort)}</span>`;
   }
   if (data.weight && data.weight !== "—") {
     const kg = parseFloat(String(data.weight).replace(/[^0-9.]/g, ""));
@@ -742,23 +881,39 @@ function mgBuildInlinePatientTags(data) {
       const l = lbsRem === 14 ? 0 : lbsRem;
       extra = ` <span class="mg-ipc-muted">·</span> ${s} st ${l} lb <span class="mg-ipc-muted">·</span> ${Math.round(totalLb)} lb`;
     }
-    html += `<span class="mg-ipc-tag mg-ipc-tag-slate">⚖ ${mgEscapeHtml(data.weight)}${extra}</span>`;
+    vitals += `<span class="mg-ipc-tag mg-ipc-tag-slate">⚖ ${mgEscapeHtml(data.weight)}${extra}</span>`;
   }
   if (data.height && data.height !== "—") {
-    html += `<span class="mg-ipc-tag mg-ipc-tag-slate">↕ ${mgEscapeHtml(data.height)}</span>`;
+    vitals += `<span class="mg-ipc-tag mg-ipc-tag-slate">↕ ${mgEscapeHtml(data.height)}</span>`;
   }
-  return html;
+  return { primary, vitals };
 }
 
 function mgInjectInlinePatientCardStyles() {
-  if (document.getElementById("mg-inline-patient-card-styles")) return;
-  const style = document.createElement("style");
-  style.id = "mg-inline-patient-card-styles";
+  let style = document.getElementById("mg-inline-patient-card-styles");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "mg-inline-patient-card-styles";
+    document.documentElement.appendChild(style);
+  }
   style.textContent = `
-    #mg-inline-patient-card {
+    #mg-inline-patient-card-slot {
+      display: block !important;
+      flex: 0 0 100% !important;
+      flex-shrink: 0;
+      width: 100% !important;
+      max-width: 100% !important;
+      grid-column: 1 / -1;
+      clear: both;
+      box-sizing: border-box;
       margin: 0 0 16px;
-      padding: 0;
+    }
+    #mg-inline-patient-card {
+      display: block;
       width: 100%;
+      max-width: 100%;
+      margin: 0;
+      padding: 0;
       box-sizing: border-box;
     }
     #mg-inline-patient-card .mg-ipc-shell {
@@ -767,10 +922,30 @@ function mgInjectInlinePatientCardStyles() {
       border-radius: 16px;
       box-shadow: 0 2px 12px rgba(15, 23, 42, 0.06);
       padding: 20px 24px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 20px 32px;
-      align-items: start;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-sizing: border-box;
+    }
+    #mg-inline-patient-card .mg-ipc-header,
+    #mg-inline-patient-card .mg-ipc-body {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 32px;
+    }
+    #mg-inline-patient-card .mg-ipc-header-left,
+    #mg-inline-patient-card .mg-ipc-body-left {
+      flex: 1;
+      min-width: 0;
+    }
+    #mg-inline-patient-card .mg-ipc-header-right,
+    #mg-inline-patient-card .mg-ipc-body-right {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      text-align: right;
     }
     #mg-inline-patient-card .mg-ipc-name {
       font-family: Georgia, "Times New Roman", serif;
@@ -788,7 +963,6 @@ function mgInjectInlinePatientCardStyles() {
       font-size: 13px;
       color: #78716c;
       font-weight: 500;
-      margin-bottom: 14px;
     }
     #mg-inline-patient-card .mg-ipc-age {
       background: #f5f5f4;
@@ -803,6 +977,9 @@ function mgInjectInlinePatientCardStyles() {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+    }
+    #mg-inline-patient-card .mg-ipc-tags-vitals {
+      margin-top: 8px;
     }
     #mg-inline-patient-card .mg-ipc-tag {
       display: inline-flex;
@@ -821,17 +998,12 @@ function mgInjectInlinePatientCardStyles() {
     #mg-inline-patient-card .mg-ipc-tag-blue { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
     #mg-inline-patient-card .mg-ipc-tag-slate { background: #fafaf9; color: #57534e; border-color: #e7e5e4; }
     #mg-inline-patient-card .mg-ipc-muted { opacity: 0.45; margin: 0 2px; }
-    #mg-inline-patient-card .mg-ipc-right {
-      text-align: right;
-      min-width: 180px;
-    }
     #mg-inline-patient-card .mg-ipc-submitted {
       display: inline-block;
       background: #fafaf9;
       border: 1px solid #e7e5e4;
       border-radius: 10px;
       padding: 8px 12px;
-      margin-bottom: 12px;
     }
     #mg-inline-patient-card .mg-ipc-submitted-lbl {
       font-size: 10px;
@@ -851,6 +1023,7 @@ function mgInjectInlinePatientCardStyles() {
       font-weight: 800;
       color: #1c1917;
       letter-spacing: -0.02em;
+      line-height: 1.2;
     }
     #mg-inline-patient-card .mg-ipc-med {
       font-size: 15px;
@@ -876,28 +1049,38 @@ function mgInjectInlinePatientCardStyles() {
     #mg-inline-patient-card .mg-ipc-status-review { background: #fffbeb; color: #b45309; border-color: #fde68a; }
     #mg-inline-patient-card .mg-ipc-status-default { background: #f5f5f4; color: #57534e; border-color: #e7e5e4; }
     @media (max-width: 900px) {
-      #mg-inline-patient-card .mg-ipc-shell {
-        grid-template-columns: 1fr;
+      #mg-inline-patient-card .mg-ipc-header,
+      #mg-inline-patient-card .mg-ipc-body {
+        flex-direction: column;
+        gap: 12px;
       }
-      #mg-inline-patient-card .mg-ipc-right { text-align: left; }
+      #mg-inline-patient-card .mg-ipc-header-right,
+      #mg-inline-patient-card .mg-ipc-body-right {
+        align-items: flex-start;
+        text-align: left;
+        width: 100%;
+      }
     }
   `;
-  document.documentElement.appendChild(style);
 }
 
 function renderInlinePatientCard(data) {
+  const wrap = document.querySelector(".od2-wrap");
   const topbar = document.querySelector(".od2-topbar");
-  if (!topbar || !data?.patientName) return;
+  if (!wrap || !topbar || !data?.patientName) return;
 
   mgInjectInlinePatientCardStyles();
+  mgEnsureInlinePatientCardLayoutSync();
+
+  const slot = mgEnsureInlinePatientCardSlot(topbar, wrap);
 
   let card = document.getElementById("mg-inline-patient-card");
   if (!card) {
     card = document.createElement("div");
     card.id = "mg-inline-patient-card";
-    topbar.insertAdjacentElement("afterend", card);
-  } else if (card.previousElementSibling !== topbar) {
-    topbar.insertAdjacentElement("afterend", card);
+    slot.appendChild(card);
+  } else if (card.parentElement !== slot) {
+    slot.appendChild(card);
   }
 
   const orderNumEl = document.querySelector(".od2-topbar .od2-order-num");
@@ -913,32 +1096,46 @@ function renderInlinePatientCard(data) {
     .filter(Boolean).join(" · ");
 
   const dobParts = [];
-  if (data.dob) dobParts.push(`DOB ${mgEscapeHtml(data.dob)}`);
+  if (data.dob && data.dob !== "—") dobParts.push(`DOB ${mgEscapeHtml(data.dob)}`);
   if (data.age != null) dobParts.push(`<span class="mg-ipc-age">${data.age} yrs</span>`);
+
+  const tags = mgBuildInlinePatientTags(data);
 
   card.innerHTML = `
     <div class="mg-ipc-shell">
-      <div class="mg-ipc-left">
-        <h2 class="mg-ipc-name">${mgEscapeHtml(data.patientName)}</h2>
-        ${dobParts.length ? `<div class="mg-ipc-dob">${dobParts.join(" ")}</div>` : ""}
-        <div class="mg-ipc-tags">${mgBuildInlinePatientTags(data)}</div>
+      <div class="mg-ipc-header">
+        <div class="mg-ipc-header-left">
+          <h2 class="mg-ipc-name">${mgEscapeHtml(data.patientName)}</h2>
+          ${dobParts.length ? `<div class="mg-ipc-dob">${dobParts.join(" ")}</div>` : ""}
+        </div>
+        <div class="mg-ipc-header-right">
+          ${orderDate ? `<div class="mg-ipc-submitted"><div class="mg-ipc-submitted-lbl">Submitted</div><div class="mg-ipc-submitted-val">${mgEscapeHtml(orderDate)}</div></div>` : ""}
+        </div>
       </div>
-      <div class="mg-ipc-right">
-        ${orderDate ? `<div class="mg-ipc-submitted"><div class="mg-ipc-submitted-lbl">Submitted</div><div class="mg-ipc-submitted-val">${mgEscapeHtml(orderDate)}</div></div>` : ""}
-        ${orderNum ? `<div class="mg-ipc-order-num">${mgEscapeHtml(orderNum)}</div>` : ""}
-        ${medLine ? `<div class="mg-ipc-med">${mgEscapeHtml(medLine)}</div>` : ""}
-        ${statusText ? `<div class="mg-ipc-status mg-ipc-status-${statusCls}"><span class="dot"></span>${mgEscapeHtml(statusText)}</div>` : ""}
+      <div class="mg-ipc-body">
+        <div class="mg-ipc-body-left">
+          ${tags.primary ? `<div class="mg-ipc-tags mg-ipc-tags-primary">${tags.primary}</div>` : ""}
+          ${tags.vitals ? `<div class="mg-ipc-tags mg-ipc-tags-vitals">${tags.vitals}</div>` : ""}
+        </div>
+        <div class="mg-ipc-body-right">
+          ${orderNum ? `<div class="mg-ipc-order-num">${mgEscapeHtml(orderNum)}</div>` : ""}
+          ${medLine ? `<div class="mg-ipc-med">${mgEscapeHtml(medLine)}</div>` : ""}
+          ${statusText ? `<div class="mg-ipc-status mg-ipc-status-${statusCls}"><span class="dot"></span>${mgEscapeHtml(statusText)}</div>` : ""}
+        </div>
       </div>
     </div>
   `;
+
+  requestAnimationFrame(() => mgSyncInlinePatientCardLayout());
 }
 
 function ensureInlinePatientCardObserver() {
   if (window.__mgInlinePatientCardObs) return;
   window.__mgInlinePatientCardObs = true;
   const obs = new MutationObserver(() => {
+    const wrap = document.querySelector(".od2-wrap");
     const topbar = document.querySelector(".od2-topbar");
-    if (!topbar || document.getElementById("mg-inline-patient-card")) return;
+    if (!wrap || !topbar || document.getElementById("mg-inline-patient-card")) return;
     if (lastScannedData?.patientName) renderInlinePatientCard(lastScannedData);
   });
   const start = () => {
@@ -1317,6 +1514,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   //    user selected in our side-panel modal, then clicks Confirm.
   if (message.type === "RX_HOLD_ORDER") {
     rxPlaceOnHold(message.reason, message.docs).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "SEND_PATIENT_MESSAGE") {
+    sendPatientChatMessage(message.text).then(sendResponse);
     return true;
   }
 
