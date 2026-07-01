@@ -82,10 +82,16 @@ function waitForEl(selector, timeoutMs = 3000, root = document) {
 function setFieldValue(el, value) {
   if (!el) return;
   if (el.type === "radio" || el.type === "checkbox") {
+    const label = el.closest("label");
+    if (label) {
+      try { label.click(); } catch {}
+    }
     el.checked = true;
     el.dispatchEvent(new Event("input", { bubbles: true }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
-    el.click();
+    if (!el.checked) {
+      try { el.click(); } catch {}
+    }
     return;
   }
   const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
@@ -94,6 +100,37 @@ function setFieldValue(el, value) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
   el.dispatchEvent(new Event("blur", { bubbles: true }));
+}
+
+function clickRxaRadio(input) {
+  if (!input) return false;
+  const label = input.closest("label.rxa-radio") || input.closest("label");
+  if (label) {
+    try { label.click(); } catch {}
+  }
+  input.checked = true;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  if (!input.checked) {
+    try { input.click(); } catch {}
+  }
+  return input.checked;
+}
+
+function setRxaDateInput(el, isoDate) {
+  if (!el) return false;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (setter) setter.call(el, isoDate);
+  else el.value = isoDate;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.dispatchEvent(new Event("blur", { bubbles: true }));
+  return el.value === isoDate;
+}
+
+function todayIsoDate() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
 // Read user-customisable default texts from extension storage; fall back to
@@ -143,8 +180,8 @@ async function rxApproveAutofill(userComment, scrMode) {
     await sleep(250); // let any slide-in animation settle
 
     // 3) Step 1 — select SCR status and fill the matching text field
-    setFieldValue(scrRadio, true);
-    await sleep(200);
+    clickRxaRadio(scrRadio);
+    await sleep(250);
 
     if (useScrAccessed) {
       const scrSummary = await waitForEl("#rxaScrSummary", 1500);
@@ -159,16 +196,23 @@ async function rxApproveAutofill(userComment, scrMode) {
       if (scrReason) setFieldValue(scrReason, defaults.scr);
     }
 
-    // 4) Communication: Secure Message + today's date + summary
+    // 4) Communication: Secure Message + today's date + summary (order matters for validation)
     const commRadio = await waitForEl('input[name="rxa_comm_method"][value="secure_message"]', 3000);
     if (!commRadio) return { success: false, error: "Communication method option not found" };
-    setFieldValue(commRadio, true);
-    await sleep(120);
+    clickRxaRadio(commRadio);
+    await sleep(150);
+    if (!commRadio.checked) {
+      clickRxaRadio(commRadio);
+      await sleep(150);
+    }
+    if (!commRadio.checked) return { success: false, error: "Could not select Secure Message" };
 
-    const today = new Date();
-    const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const iso = todayIsoDate();
     const commDate = await waitForEl("#rxaCommDate", 1500);
-    if (commDate) setFieldValue(commDate, iso);
+    if (!commDate) return { success: false, error: "Communication date field not found" };
+    setRxaDateInput(commDate, iso);
+    await sleep(100);
+    if (commDate.value !== iso) setRxaDateInput(commDate, iso);
 
     const commSummary = await waitForEl("#rxaCommSummary", 1500);
     if (commSummary) setFieldValue(commSummary, defaults.counselling);
@@ -1156,6 +1200,7 @@ function performScan() {
 
   renderInlinePatientCard(data);
   ensureInlinePatientCardObserver();
+  try { ensureDecisionScrLink(); } catch (_) {}
 
   chrome.runtime.sendMessage({
     type: "ORDER_DATA_SCANNED",
@@ -4490,6 +4535,216 @@ try {
 } catch (_) {}
 
 // ── NHS SCR link — track tabs opened after "Go to NHS SCR" ─────────────────
+
+const MG_SCR_FIND_PATIENT_URL = "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/app/find_patient";
+
+function mgDecisionScrLinkMarkup() {
+  return `
+    <span class="ico"><i class="bx bx-right-arrow-alt"></i></span>
+    <span class="lbl">
+      <span class="t1">Go to NHS SCR</span>
+    </span>
+  `;
+}
+
+function mgDecisionScrLinkIsReady(link, urgentBtn, decisionCard) {
+  if (!link || !urgentBtn || !decisionCard) return false;
+  return link.getAttribute("href") === MG_SCR_FIND_PATIENT_URL
+    && link.classList.contains("od2-action")
+    && link.classList.contains("action-scr")
+    && link.parentElement === decisionCard
+    && link.previousElementSibling === urgentBtn
+    && link.querySelector(".t1")?.textContent?.trim() === "Go to NHS SCR"
+    && !link.querySelector(".t2");
+}
+
+function mgApplyDecisionScrLink(link) {
+  link.href = MG_SCR_FIND_PATIENT_URL;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.className = "od2-action action-scr scr-cta";
+  if (link.innerHTML.trim() !== mgDecisionScrLinkMarkup().trim()) {
+    link.innerHTML = mgDecisionScrLinkMarkup();
+  }
+}
+
+function injectDecisionScrLinkStyles() {
+  let style = document.getElementById("mg-decision-scr-styles");
+  if (!style) {
+    style = document.createElement("style");
+    style.id = "mg-decision-scr-styles";
+    document.documentElement.appendChild(style);
+  }
+  style.textContent = `
+    a#mg-decision-scr-link.od2-action.action-scr {
+      border: 1px solid #ddd6fe;
+      background: linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%);
+      text-decoration: none;
+      color: inherit;
+    }
+    a#mg-decision-scr-link.od2-action.action-scr:hover {
+      background: linear-gradient(180deg, #f5f3ff 0%, #ede9fe 100%);
+      border-color: #c4b5fd;
+    }
+    a#mg-decision-scr-link.od2-action.action-scr:active {
+      transform: translateY(1px);
+    }
+    a#mg-decision-scr-link.od2-action.action-scr .ico {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      min-height: 28px;
+      max-width: 28px;
+      max-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      align-self: center;
+      flex-shrink: 0;
+      border-radius: 6px;
+      font-size: 14px;
+      background: #ddd6fe;
+      color: #7c3aed;
+    }
+    a#mg-decision-scr-link.od2-action.action-scr .t1 {
+      color: #5b21b6;
+    }
+  `;
+}
+
+function mgSyncDecisionScrLinkSize() {
+  const ref = document.getElementById("od2UrgentBtn") || document.querySelector(".od2-card .od2-action");
+  const link = document.getElementById("mg-decision-scr-link");
+  if (!ref || !link) return;
+
+  const refStyle = getComputedStyle(ref);
+  const refRect = ref.getBoundingClientRect();
+  const btnH = Math.round(refRect.height);
+
+  ["display", "alignItems", "flexDirection", "borderRadius", "marginTop", "marginBottom", "padding", "gap"].forEach((prop) => {
+    link.style[prop] = refStyle[prop];
+  });
+  if (btnH > 0) link.style.minHeight = `${btnH}px`;
+
+  const refIco = ref.querySelector(".ico");
+  const linkIco = link.querySelector(".ico");
+  if (refIco && linkIco) {
+    const icoStyle = getComputedStyle(refIco);
+    ["display", "alignItems", "justifyContent", "alignSelf", "borderRadius", "fontSize", "padding"].forEach((prop) => {
+      linkIco.style[prop] = icoStyle[prop];
+    });
+    linkIco.style.width = "28px";
+    linkIco.style.height = "28px";
+    linkIco.style.minWidth = "28px";
+    linkIco.style.minHeight = "28px";
+    linkIco.style.maxWidth = "28px";
+    linkIco.style.maxHeight = "28px";
+  }
+
+  const refLbl = ref.querySelector(".lbl");
+  const linkLbl = link.querySelector(".lbl");
+  if (refLbl && linkLbl) {
+    const lblStyle = getComputedStyle(refLbl);
+    ["display", "flexDirection", "justifyContent", "alignItems", "padding", "gap", "flex"].forEach((prop) => {
+      linkLbl.style[prop] = lblStyle[prop];
+    });
+  }
+
+  const refT1 = ref.querySelector(".t1");
+  const t1 = link.querySelector(".t1");
+  if (refT1 && t1) {
+    const s = getComputedStyle(refT1);
+    t1.style.fontSize = s.fontSize;
+    t1.style.fontWeight = s.fontWeight;
+    t1.style.lineHeight = s.lineHeight;
+  }
+}
+
+function ensureDecisionScrLink() {
+  const urgentBtn = document.getElementById("od2UrgentBtn");
+  const decisionCard = urgentBtn?.closest(".od2-card");
+  if (!urgentBtn || !decisionCard) return false;
+
+  injectDecisionScrLinkStyles();
+
+  let link = document.getElementById("mg-decision-scr-link");
+  if (!link) {
+    link = document.createElement("a");
+    link.id = "mg-decision-scr-link";
+  }
+
+  if (mgDecisionScrLinkIsReady(link, urgentBtn, decisionCard)) {
+    mgSyncDecisionScrLinkSize();
+    return true;
+  }
+
+  mgApplyDecisionScrLink(link);
+
+  if (link.parentElement !== decisionCard || link.previousElementSibling !== urgentBtn) {
+    urgentBtn.insertAdjacentElement("afterend", link);
+  }
+
+  mgSyncDecisionScrLinkSize();
+  requestAnimationFrame(() => mgSyncDecisionScrLinkSize());
+  return true;
+}
+
+function initDecisionScrLinkEarly() {
+  injectDecisionScrLinkStyles();
+
+  let debounceTimer = null;
+  let pollId = null;
+  let polls = 0;
+
+  const tryInject = () => {
+    try {
+      if (ensureDecisionScrLink()) {
+        if (pollId) {
+          clearInterval(pollId);
+          pollId = null;
+        }
+      }
+    } catch (_) {}
+  };
+
+  const scheduleTry = () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      tryInject();
+    }, 150);
+  };
+
+  tryInject();
+
+  if (window.__mgDecisionScrLinkObs) return;
+  window.__mgDecisionScrLinkObs = true;
+
+  const obs = new MutationObserver(scheduleTry);
+  const attachObs = () => {
+    const root = document.querySelector(".od2-col-right");
+    if (root) obs.observe(root, { childList: true, subtree: true });
+  };
+  if (document.body) attachObs();
+  else document.addEventListener("DOMContentLoaded", attachObs, { once: true });
+
+  pollId = setInterval(() => {
+    tryInject();
+    if (mgDecisionScrLinkIsReady(
+      document.getElementById("mg-decision-scr-link"),
+      document.getElementById("od2UrgentBtn"),
+      document.getElementById("od2UrgentBtn")?.closest(".od2-card")
+    ) || ++polls >= 40) {
+      clearInterval(pollId);
+      pollId = null;
+    }
+  }, 250);
+}
+
+function ensureDecisionScrLinkObserver() {
+  initDecisionScrLinkEarly();
+}
+
 function initScrLinkTracking() {
   if (window.__mgScrLinkTracking) return;
   window.__mgScrLinkTracking = true;
@@ -4506,3 +4761,5 @@ function initScrLinkTracking() {
 }
 if (document.body) initScrLinkTracking();
 else document.addEventListener("DOMContentLoaded", initScrLinkTracking, { once: true });
+
+initDecisionScrLinkEarly();
