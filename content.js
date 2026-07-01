@@ -422,6 +422,463 @@ function calculateAge(dobString) {
   return age;
 }
 
+const MG_MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const MG_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function parseMedDate(str) {
+  if (!str) return null;
+  const clean = String(str).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(clean)) {
+    const d = new Date(clean.slice(0, 10));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (clean.includes("/")) {
+    const parts = clean.split("/");
+    if (parts.length >= 3) {
+      let y = parseInt(parts[2], 10);
+      if (y < 100) y += 2000;
+      const d = new Date(y, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+  }
+  const m = clean.match(/(\d{1,2})(?:st|nd|rd|th)?[\s/.-]+(\w{3,9})[\s/.-]*(\d{2,4})?/i);
+  if (m) {
+    const monKey = m[2].toLowerCase().substring(0, 3);
+    const month = MG_MONTHS[monKey];
+    if (month !== undefined) {
+      let y = m[3] ? parseInt(m[3], 10) : new Date().getFullYear();
+      if (y < 100) y += 2000;
+      const d = new Date(y, month, parseInt(m[1], 10));
+      return isNaN(d.getTime()) ? null : d;
+    }
+  }
+  const d = new Date(clean);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function toIsoDate(d) {
+  if (!d || isNaN(d.getTime())) return null;
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${mo}-${day}`;
+}
+
+function formatMedDate(d) {
+  if (!d || isNaN(d.getTime())) return null;
+  return `${d.getDate()} ${MG_MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function addDays(d, days) {
+  const out = new Date(d.getTime());
+  out.setDate(out.getDate() + days);
+  return out;
+}
+
+function startOfDay(d) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+const FULFILLED_DAYS_AFTER_ORDER = 3;
+
+function parsePenQty(text) {
+  if (!text) return 1;
+  const bundle = text.match(/(\d+)\s*[-–]?\s*pen\s*bundle/i);
+  if (bundle) return parseInt(bundle[1], 10) || 1;
+  const qtyM = text.match(/qty[:\s]*(\d+)/i);
+  if (qtyM) return parseInt(qtyM[1], 10) || 1;
+  const weeksM = text.match(/weeks?\s*(\d+)\s*[-–]\s*(\d+)/i);
+  if (weeksM) {
+    const wks = parseInt(weeksM[2], 10) - parseInt(weeksM[1], 10) + 1;
+    return Math.max(1, Math.round(wks / 4));
+  }
+  return 1;
+}
+
+function orderDateToFulfilled(orderDate) {
+  if (!orderDate) return null;
+  const fulfilled = addDays(orderDate, FULFILLED_DAYS_AFTER_ORDER);
+  return {
+    date: fulfilled,
+    dateIso: toIsoDate(fulfilled),
+    dateFormatted: formatMedDate(fulfilled)
+  };
+}
+
+function qtyToSupplyWeeks(qty) {
+  return Math.max(4, (parseInt(qty, 10) || 1) * 4);
+}
+
+/** Expected last injection = fulfilled + supply weeks + 1 wk grace; OK window extends +1 wk. */
+function computeTreatmentTimeline(fulfilledDate, qty) {
+  const supplyWeeks = qtyToSupplyWeeks(qty);
+  const earliestLast = addDays(fulfilledDate, supplyWeeks * 7);
+  const expectedLast = addDays(fulfilledDate, supplyWeeks * 7 + 7);
+  const okUntil = addDays(expectedLast, 7);
+  return {
+    supplyWeeks,
+    pens: Math.max(1, parseInt(qty, 10) || 1),
+    earliestLast,
+    expectedLast,
+    okUntil
+  };
+}
+
+function formatDateRange(from, to) {
+  if (!from || !to) return null;
+  return `${formatMedDate(from)} – ${formatMedDate(to)}`;
+}
+
+function extractDeclaredLastInjection(answers) {
+  if (!answers?.length) return null;
+  for (const qa of answers) {
+    const q = qa.question.toLowerCase();
+    const mentionsLast = q.includes("last") && (
+      q.includes("inject") || q.includes("injection") || q.includes("dose")
+    );
+    const step3 = q.includes("when was") && q.includes("date");
+    if (!mentionsLast && !step3 && !q.includes("when did you last") && !q.includes("date of your last")) continue;
+    const parsed = parseMedDate(qa.answer);
+    if (parsed) return { raw: qa.answer.trim(), iso: toIsoDate(parsed), date: parsed };
+  }
+  return null;
+}
+
+function extractAnotherProviderAnswer(answers) {
+  if (!answers?.length) return null;
+  for (const qa of answers) {
+    const q = qa.question.toLowerCase();
+    if (!q.includes("another provider") && !(q.includes("obtain") && q.includes("from"))) continue;
+    const a = qa.answer.trim();
+    if (!a) continue;
+    const low = a.toLowerCase();
+    if (low === "yes" || low.startsWith("yes")) return { raw: a, value: "yes" };
+    if (low === "no" || low.startsWith("no")) return { raw: a, value: "no" };
+    return { raw: a, value: null };
+  }
+  return null;
+}
+
+function scrapeFulfilledDateFromTile() {
+  for (const tile of document.querySelectorAll(".em-info-tile")) {
+    const label = tile.querySelector(".em-info-label")?.textContent.trim().toLowerCase() || "";
+    if (!label.includes("fulfil")) continue;
+    const val = tile.querySelector(".em-info-value")?.textContent.trim();
+    const date = parseMedDate(val);
+    if (date) {
+      return { date, dateIso: toIsoDate(date), dateFormatted: formatMedDate(date), raw: val };
+    }
+  }
+  return null;
+}
+
+function parseOrderHistoryRow(tr) {
+  const cells = [...tr.querySelectorAll("td")];
+  if (cells.length < 3) return null;
+  const rowText = tr.textContent.replace(/\s+/g, " ").trim();
+  if (!/\bfulfilled\b/i.test(rowText) || /\bunfulfilled\b/i.test(rowText)) return null;
+
+  let orderNo = null;
+  let dateStr = null;
+  let medication = null;
+  let isFulfilled = false;
+
+  cells.forEach(cell => {
+    const t = cell.textContent.trim();
+    const tl = t.toLowerCase();
+    if (tl === "fulfilled") isFulfilled = true;
+    const orderMatch = t.match(/#?\s*(\d{3,})/);
+    if (orderMatch && !/mg|weeks|pen/i.test(t)) orderNo = orderMatch[1];
+    if (parseMedDate(t)) dateStr = t;
+    if (/injectable|mounjaro|wegovy|nevolat|pen|mg|weeks/i.test(t)) medication = t;
+  });
+
+  if (!isFulfilled) return null;
+  const orderDate = parseMedDate(dateStr);
+  if (!orderDate) return null;
+
+  const medText = medication || rowText;
+  const qty = parsePenQty(medText);
+  const fulfilled = orderDateToFulfilled(orderDate);
+
+  return {
+    orderNo,
+    orderDate,
+    orderDateFormatted: formatMedDate(orderDate),
+    date: fulfilled.date,
+    dateIso: fulfilled.dateIso,
+    dateFormatted: fulfilled.dateFormatted,
+    qty,
+    medication: medText
+  };
+}
+
+function scrapeLastFulfilledOrder(currentOrderNo) {
+  const selectors = [
+    '[data-panel="history"] tr',
+    '[data-tab-panel="history"] tr',
+    ".od2-history tr",
+    ".od2-panel-history tr",
+    ".od2-wrap tr"
+  ];
+  let best = null;
+  const seen = new Set();
+  const visitRow = (tr) => {
+    if (seen.has(tr)) return;
+    seen.add(tr);
+    const entry = parseOrderHistoryRow(tr);
+    if (!entry) return;
+    if (currentOrderNo && entry.orderNo === String(currentOrderNo).replace("#", "")) return;
+    if (!best || entry.orderDate > best.orderDate) best = entry;
+  };
+  selectors.forEach(sel => document.querySelectorAll(sel).forEach(visitRow));
+  return best;
+}
+
+function resolveLastFulfilledForGap(data) {
+  const fromHistory = scrapeLastFulfilledOrder(data.orderNo);
+  if (fromHistory?.date) return fromHistory;
+
+  const fromTile = scrapeFulfilledDateFromTile();
+  if (fromTile?.date) {
+    return { ...fromTile, qty: data.qty || 1, source: "tile" };
+  }
+
+  // Fallback: derive from most recent fulfilled order card/list on page (order date + 3 days).
+  const cardSelectors = [
+    "[data-order-status='fulfilled']",
+    "[data-status='fulfilled']",
+    ".order-card",
+    ".em-order-card"
+  ];
+  let best = null;
+  cardSelectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => {
+      const text = el.textContent.replace(/\s+/g, " ").trim();
+      if (!/\bfulfilled\b/i.test(text) || /\bunfulfilled\b/i.test(text)) return;
+      const dateMatch = text.match(/(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}|\d{1,2}\s+\w{3,9}\s+\d{4})/i);
+      if (!dateMatch) return;
+      const orderDate = parseMedDate(dateMatch[1]);
+      if (!orderDate) return;
+      const orderNoMatch = text.match(/#\s*(\d+)/);
+      const orderNo = orderNoMatch ? orderNoMatch[1] : null;
+      if (data.orderNo && orderNo === String(data.orderNo).replace("#", "")) return;
+      const fulfilled = orderDateToFulfilled(orderDate);
+      const entry = {
+        orderNo,
+        orderDate,
+        orderDateFormatted: formatMedDate(orderDate),
+        date: fulfilled.date,
+        dateIso: fulfilled.dateIso,
+        dateFormatted: fulfilled.dateFormatted,
+        qty: parsePenQty(text),
+        medication: text,
+        source: "card"
+      };
+      if (!best || entry.orderDate > best.orderDate) best = entry;
+    });
+  });
+  return best;
+}
+
+function enrichTreatmentGapData(data) {
+  const fulfilled = resolveLastFulfilledForGap(data);
+  if (!fulfilled?.date) return;
+
+  data.fulfilledDate = fulfilled.dateFormatted || formatMedDate(fulfilled.date);
+  data.fulfilledDateIso = fulfilled.dateIso || toIsoDate(fulfilled.date);
+  data.fulfilledOrderDate = fulfilled.orderDateFormatted || (fulfilled.orderDate ? formatMedDate(fulfilled.orderDate) : null);
+  data.fulfilledQty = fulfilled.qty || data.qty || 1;
+  data.fulfilledOrderNo = fulfilled.orderNo || null;
+  data.fulfilledDerived = fulfilled.source !== "tile";
+
+  const tl = computeTreatmentTimeline(fulfilled.date, data.fulfilledQty);
+  data.supplyWeeks = tl.supplyWeeks;
+  data.expectedLastDose = formatMedDate(tl.expectedLast);
+  data.expectedLastDoseIso = toIsoDate(tl.expectedLast);
+  data.expectedLastDoseOkUntil = formatMedDate(tl.okUntil);
+  data.expectedLastDoseOkUntilIso = toIsoDate(tl.okUntil);
+  data.expectedLastDoseRange = formatDateRange(tl.earliestLast, tl.okUntil);
+
+  const declared = extractDeclaredLastInjection(data.consultationAnswers);
+  const anotherProvider = extractAnotherProviderAnswer(data.consultationAnswers);
+  if (anotherProvider) {
+    data.anotherProviderAnswer = anotherProvider.raw;
+    data.anotherProviderYes = anotherProvider.value === "yes";
+    data.anotherProviderNo = anotherProvider.value === "no";
+  }
+
+  if (declared) {
+    data.declaredLastInjection = declared.raw;
+    data.declaredLastInjectionIso = declared.iso;
+    const declaredDay = startOfDay(declared.date);
+    const okUntilDay = startOfDay(tl.okUntil);
+    if (declaredDay.getTime() <= okUntilDay.getTime()) {
+      data.treatmentGapOk = true;
+      data.treatmentGapWeeks = 0;
+      data.supplyCheckRequired = false;
+    } else {
+      data.treatmentGapOk = false;
+      data.treatmentGapWeeks = Math.ceil((declaredDay - okUntilDay) / (1000 * 60 * 60 * 24 * 7));
+      data.supplyCheckRequired = true;
+    }
+  } else {
+    data.treatmentGapOk = null;
+    data.treatmentGapWeeks = null;
+    data.supplyCheckRequired = null;
+  }
+}
+
+function mgSupplyCheckMedLabel(medication) {
+  if (!medication) return "medication";
+  return medication.replace(/\s*®\s*/g, "® ").trim();
+}
+
+function mgInjectSupplyCheckStyles() {
+  if (document.getElementById("mg-supply-check-styles")) return;
+  const style = document.createElement("style");
+  style.id = "mg-supply-check-styles";
+  style.textContent = `
+    #mg-supply-check-panel {
+      grid-column: 1 / -1;
+      width: 100%;
+      box-sizing: border-box;
+      margin: 0 0 16px;
+    }
+    #mg-supply-check-panel .mg-sc-shell {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      border-radius: 14px;
+      padding: 18px 20px;
+      box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
+    }
+    #mg-supply-check-panel .mg-sc-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    #mg-supply-check-panel .mg-sc-icon {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #fef3c7; color: #92400e;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px; flex-shrink: 0;
+    }
+    #mg-supply-check-panel .mg-sc-title {
+      font-size: 16px; font-weight: 800; color: #78350f; margin: 0 0 4px;
+    }
+    #mg-supply-check-panel .mg-sc-sub {
+      font-size: 13px; color: #92400e; line-height: 1.45; margin: 0;
+    }
+    #mg-supply-check-panel .mg-sc-detail {
+      background: #fff;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    #mg-supply-check-panel .mg-sc-detail-title {
+      font-size: 14px; font-weight: 800; color: #78350f; margin: 0 0 8px;
+    }
+    #mg-supply-check-panel .mg-sc-detail p {
+      font-size: 13px; color: #57534e; line-height: 1.55; margin: 0 0 8px;
+    }
+    #mg-supply-check-panel .mg-sc-detail p:last-child { margin-bottom: 0; }
+    #mg-supply-check-panel .mg-sc-q {
+      font-size: 13px; font-weight: 700; color: #78350f; margin: 0 0 8px;
+    }
+    #mg-supply-check-panel .mg-sc-answer {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      border: 1px solid #fcd34d; background: #fff;
+    }
+    #mg-supply-check-panel .mg-sc-answer.is-yes { color: #9a3412; border-color: #fdba74; background: #fff7ed; }
+    #mg-supply-check-panel .mg-sc-answer.is-no { color: #166534; border-color: #86efac; background: #f0fdf4; }
+    #mg-supply-check-panel .mg-sc-answer.is-missing { color: #92400e; border-style: dashed; }
+    #mg-supply-check-panel .mg-sc-foot {
+      margin-top: 12px; padding-top: 12px; border-top: 1px solid #fde68a;
+      font-size: 12px; color: #92400e; font-weight: 600;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function renderSupplyCheckPanel(data) {
+  const slot = document.getElementById("mg-inline-patient-card-slot")
+    || document.querySelector(".od2-wrap");
+  if (!slot) return;
+
+  let panel = document.getElementById("mg-supply-check-panel");
+  if (data?.supplyCheckRequired !== true) {
+    if (panel) panel.remove();
+    return;
+  }
+
+  mgInjectSupplyCheckStyles();
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.id = "mg-supply-check-panel";
+    const card = document.getElementById("mg-inline-patient-card");
+    if (card?.nextSibling) slot.insertBefore(panel, card.nextSibling);
+    else slot.appendChild(panel);
+  }
+
+  const pens = data.fulfilledQty || 1;
+  const penLabel = pens === 1 ? "1 pen" : `${pens} pens`;
+  const med = mgSupplyCheckMedLabel(data.medication || "medication");
+  const range = data.expectedLastDoseRange || `${data.expectedLastDose || "—"} – ${data.expectedLastDoseOkUntil || "—"}`;
+  const entered = data.declaredLastInjection || "—";
+
+  let answerHtml = `<span class="mg-sc-answer is-missing">Not answered in consultation yet</span>`;
+  if (data.anotherProviderYes) {
+    answerHtml = `<span class="mg-sc-answer is-yes">Yes — obtained from another provider</span>`;
+  } else if (data.anotherProviderNo) {
+    answerHtml = `<span class="mg-sc-answer is-no">No — did not obtain elsewhere</span>`;
+  } else if (data.anotherProviderAnswer) {
+    answerHtml = `<span class="mg-sc-answer">${mgEscapeHtml(data.anotherProviderAnswer)}</span>`;
+  }
+
+  panel.innerHTML = `
+    <div class="mg-sc-shell">
+      <div class="mg-sc-head">
+        <div class="mg-sc-icon">!</div>
+        <div>
+          <div class="mg-sc-title">Check your supply</div>
+          <p class="mg-sc-sub">The patient's Step 3 last-dose date falls outside the period estimated from their previous fulfilled order. Apply safe restart rules before approving.</p>
+        </div>
+      </div>
+      <div class="mg-sc-detail">
+        <div class="mg-sc-detail-title">We need a bit more detail about the last dose</div>
+        <p>Based on the previous order (<strong>${penLabel}</strong>), the last dose from that supply would have been between <strong>${mgEscapeHtml(range)}</strong>. The date the patient entered in Step 3 (<strong>${mgEscapeHtml(entered)}</strong>) is outside that period.</p>
+        <p>At checkout the patient should answer the supply question below before dose options unlock in step 4.</p>
+      </div>
+      <div class="mg-sc-q">During this period, did they obtain ${mgEscapeHtml(med)} from another provider?</div>
+      ${answerHtml}
+      <div class="mg-sc-foot">${data.anotherProviderAnswer ? "Review the patient's answer and apply gap/restart SOP before approving." : "Patient has not answered the supply question — consider placing on hold and using the Last Injection Date macro."}</div>
+    </div>
+  `;
+}
+
+function updateEmInfoTiles(data) {
+  if (!data) return;
+  document.querySelectorAll(".em-info-tile").forEach(tile => {
+    const labelEl = tile.querySelector(".em-info-label");
+    const valEl = tile.querySelector(".em-info-value");
+    if (!labelEl || !valEl) return;
+    const label = labelEl.textContent.trim().toLowerCase();
+    if (label === "expected last dose" && data.expectedLastDoseRange) {
+      valEl.textContent = data.expectedLastDoseRange;
+      tile.dataset.mgComputed = "expected-last-dose-range";
+    } else if (label === "expected last dose" && data.expectedLastDose) {
+      valEl.textContent = data.expectedLastDose;
+      tile.dataset.mgComputed = "expected-last-dose";
+    } else if (label.includes("fulfil") && data.fulfilledDate) {
+      valEl.textContent = data.fulfilledDate;
+      tile.dataset.mgComputed = "fulfilled-date";
+    }
+  });
+}
+
 // ── Data Scraping ──────────────────────────────────────────────────────────
 
 function scrapeOrderData() {
@@ -476,7 +933,28 @@ function scrapeOrderData() {
     patientTags: [],
 
     // Order number
-    orderNo: null
+    orderNo: null,
+
+    // Previous fulfilled order + treatment gap (from order history / consultation)
+    fulfilledDate: null,
+    fulfilledDateIso: null,
+    fulfilledOrderDate: null,
+    fulfilledQty: null,
+    fulfilledOrderNo: null,
+    supplyWeeks: null,
+    expectedLastDose: null,
+    expectedLastDoseIso: null,
+    expectedLastDoseOkUntil: null,
+    expectedLastDoseOkUntilIso: null,
+    declaredLastInjection: null,
+    declaredLastInjectionIso: null,
+    treatmentGapOk: null,
+    treatmentGapWeeks: null,
+    expectedLastDoseRange: null,
+    supplyCheckRequired: null,
+    anotherProviderAnswer: null,
+    anotherProviderYes: false,
+    anotherProviderNo: false
   };
 
   // ── Patient card (od2-patient-card) — name, DOB, tags, order no
@@ -540,8 +1018,7 @@ function scrapeOrderData() {
   // Qty
   const osSubText = getTextContent(".os-sub");
   if (osSubText) {
-    const qtyMatch = osSubText.match(/Qty:\s*(\d+)/i);
-    if (qtyMatch) data.qty = parseInt(qtyMatch[1]);
+    data.qty = parsePenQty(osSubText);
     const typeMatch = osSubText.match(/Weight Loss|Diabetes|Obesity/i);
     if (typeMatch) data.prescriptionType = typeMatch[0];
   }
@@ -738,6 +1215,14 @@ function scrapeOrderData() {
       }
     });
   });
+
+  enrichTreatmentGapData(data);
+  if (data.treatmentGapOk === false) {
+    data.flags.push({
+      level: "yellow",
+      text: `Treatment gap — declared last injection (${data.declaredLastInjection}) is after expected window (by ${data.expectedLastDoseOkUntil}). Ask if medication was used elsewhere.`
+    });
+  }
 
   return data;
 }
@@ -1199,6 +1684,8 @@ function performScan() {
   lastScannedData = data;
 
   renderInlinePatientCard(data);
+  updateEmInfoTiles(data);
+  renderSupplyCheckPanel(data);
   ensureInlinePatientCardObserver();
   try { ensureDecisionScrLink(); } catch (_) {}
 

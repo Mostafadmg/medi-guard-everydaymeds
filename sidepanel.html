@@ -1019,6 +1019,8 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       <button class="btn-scan" id="scan-btn">Scan Page</button>
     </div>
     <div id="wf-content" style="display:none; flex:1; padding:12px; flex-direction:column; gap:8px;">
+      <div id="supply-check-wrap" style="display:none;"></div>
+      <div id="elig-alert-wrap"></div>
       <div class="workflow-steps-section" id="workflow-steps-section">
         <div class="progress-wrap" id="progress-wrap-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="steps-list" title="Show / hide prescription steps">
           <div class="progress-top">
@@ -1214,7 +1216,7 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
               <div style="margin-bottom:12px; padding:10px; background:#fef3c7; border:1px solid #fcd34d; border-radius:8px; border-left:3px solid #f59e0b;">
                 <div style="font-size:10px; font-weight:700; color:#92400e; margin-bottom:6px;">📋 How to Calculate Gap in Treatment</div>
                 <div style="font-size:10px; color:#78350f; line-height:1.5;">
-                  <div><strong>📦 Normal:</strong> Use <strong>Order Date</strong> (same med / standard repeats)</div>
+                  <div><strong>📦 Normal:</strong> Use <strong>Fulfilled Date</strong> from last fulfilled order (same med / repeats)</div>
                   <div><strong>🔄 Switch:</strong> Use <strong>Last Injection Date</strong> (different med — refer to Switching SOP)</div>
                 </div>
               </div>
@@ -1225,12 +1227,12 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
                   <button type="button" id="gap-type-normal" class="gap-type-btn active" style="flex:1; padding:8px 12px; font-size:11px; font-weight:600; border:2px solid #f59e0b; background:#f59e0b; color:white; border-radius:6px; cursor:pointer;">📦 Normal</button>
                   <button type="button" id="gap-type-switch" class="gap-type-btn" style="flex:1; padding:8px 12px; font-size:11px; font-weight:600; border:2px solid #f59e0b; background:white; color:#d97706; border-radius:6px; cursor:pointer;">🔄 Switch</button>
                 </div>
-                <div id="gap-type-hint" style="font-size:9px; color:#92400e; margin-top:4px; font-style:italic;">Gap from last order date (standard transfer/repeat)</div>
+                <div id="gap-type-hint" style="font-size:9px; color:#92400e; margin-top:4px; font-style:italic;">Gap from fulfilled date + supply (+ 2 wk grace/tolerance)</div>
               </div>
 
               <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
                 <div>
-                  <label id="gap-date-label" style="font-size:11px; font-weight:600; color:#d97706; margin-bottom:4px; display:block;">Last Order Date</label>
+                  <label id="gap-date-label" style="font-size:11px; font-weight:600; color:#d97706; margin-bottom:4px; display:block;">Fulfilled Date</label>
                   <input type="date" id="gap-last-order-date" style="width:100%; padding:8px; border:1px solid #fcd34d; border-radius:6px; font-size:12px; box-sizing:border-box;">
                 </div>
                 <div>

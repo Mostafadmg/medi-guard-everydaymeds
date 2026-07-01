@@ -142,6 +142,13 @@ function evaluateEligibility(data) {
     });
   }
 
+  if (data.treatmentGapOk === false) {
+    flags.push({
+      level: "yellow",
+      text: `Check supply — Step 3 last dose (${data.declaredLastInjection || "declared"}) is outside expected window (${data.expectedLastDoseRange || `by ${data.expectedLastDoseOkUntil || "—"}`}). Confirm use from another provider.`
+    });
+  }
+
   const hasRed = flags.some(f => f.level === "red");
   const hasYellow = flags.some(f => f.level === "yellow");
   return {
@@ -292,6 +299,9 @@ function renderBanner(data) {
     html += `<span class="tag tag-slate">⚖ ${escapeHtml(data.weight)}${extra}</span>`;
   }
   if (data.height && data.height !== "—") html += `<span class="tag tag-slate">↕ ${escapeHtml(data.height)}</span>`;
+  if (data.treatmentGapOk === false) {
+    html += `<span class="tag tag-yellow" title="Step 3 last dose is outside expected supply window">⚠ Check supply</span>`;
+  }
   // (Removed the "0/6 done" tag — the same count is shown in the
   // Prescription Steps collapse header so showing it twice was noisy.)
   document.getElementById("pb-tags").innerHTML = html;
@@ -345,6 +355,51 @@ function renderEligibilityAlert(data) {
           ${issues.length > 5 ? `<li><em>…and ${issues.length - 5} more — see Eligibility tab</em></li>` : ""}
         </ul>
       </div>
+    </div>`;
+}
+
+function renderSupplyCheckAlert(data) {
+  const wrap = document.getElementById("supply-check-wrap");
+  if (!wrap) return;
+
+  if (!data || data.supplyCheckRequired !== true) {
+    wrap.innerHTML = "";
+    wrap.style.display = "none";
+    return;
+  }
+
+  wrap.style.display = "block";
+  const pens = data.fulfilledQty || 1;
+  const penLabel = pens === 1 ? "1 pen" : `${pens} pens`;
+  const med = (data.medication || "medication").replace(/\s*®\s*/g, "® ").trim();
+  const range = data.expectedLastDoseRange || `${data.expectedLastDose || "—"} – ${data.expectedLastDoseOkUntil || "—"}`;
+  const entered = escapeHtml(data.declaredLastInjection || "—");
+
+  let answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px dashed #fcd34d; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#92400e;">Not answered in consultation</div>`;
+  if (data.anotherProviderYes) {
+    answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px solid #fdba74; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#9a3412; background:#fff7ed;">Yes — from another provider</div>`;
+  } else if (data.anotherProviderNo) {
+    answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px solid #86efac; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#166534; background:#f0fdf4;">No — not from elsewhere</div>`;
+  } else if (data.anotherProviderAnswer) {
+    answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px solid #fcd34d; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#78350f; background:#fff;">${escapeHtml(data.anotherProviderAnswer)}</div>`;
+  }
+
+  wrap.innerHTML = `
+    <div style="background:#fffbeb; border:1.5px solid #fcd34d; border-radius:12px; padding:14px; margin-bottom:8px;">
+      <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:10px;">
+        <div style="width:26px; height:26px; border-radius:50%; background:#fef3c7; color:#92400e; display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0;">!</div>
+        <div>
+          <div style="font-size:13px; font-weight:800; color:#78350f;">Check your supply</div>
+          <div style="font-size:11px; color:#92400e; line-height:1.45; margin-top:3px;">Step 3 last-dose date is outside the period estimated from the previous fulfilled order.</div>
+        </div>
+      </div>
+      <div style="background:#fff; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; font-size:11px; color:#57534e; line-height:1.5;">
+        Based on the previous order (<strong>${penLabel}</strong>), the last dose from that supply would have been between <strong>${escapeHtml(range)}</strong>.
+        The patient entered <strong>${entered}</strong> in Step 3 — outside that period.
+      </div>
+      <div style="margin-top:10px; font-size:11px; font-weight:700; color:#78350f;">Did they obtain ${escapeHtml(med)} from another provider?</div>
+      ${answerBlock}
+      <div style="margin-top:10px; font-size:10px; color:#92400e; font-weight:600;">${data.anotherProviderAnswer ? "Apply gap/restart SOP before approving." : "Use the Last Injection Date macro if supply question is unanswered."}</div>
     </div>`;
 }
 
@@ -426,6 +481,38 @@ function showWorkflow(data) {
   empty.style.display = "none";
   content.style.display = "flex";
   renderWorkflow(data);
+  renderSupplyCheckAlert(data);
+  renderEligibilityAlert(data);
+  populateGapCalculatorFromOrder(data);
+}
+
+function populateGapCalculatorFromOrder(data) {
+  if (!data) return;
+  const gDateInp = document.getElementById("gap-last-order-date");
+  const gSupply = document.getElementById("gap-supply-duration");
+  const gBmi = document.getElementById("gap-current-bmi");
+  const gMedSel = document.getElementById("gap-medication");
+  const gDoseSel = document.getElementById("gap-last-dose");
+  if (data.fulfilledDateIso && gDateInp) gDateInp.value = data.fulfilledDateIso;
+  if (data.fulfilledQty && gSupply) gSupply.value = String(qtyToSupplyWeeks(data.fulfilledQty));
+  if (data.bmi != null && gBmi && !gBmi.value) gBmi.value = String(data.bmi);
+  if (gMedSel && data.medication) {
+    const medLow = data.medication.toLowerCase();
+    if (medLow.includes("mounjaro")) gMedSel.value = "mounjaro";
+    else if (medLow.includes("wegovy")) gMedSel.value = "wegovy";
+    else if (medLow.includes("nevolat")) gMedSel.value = "nevolat";
+    if (gMedSel.value && gDoseSel && typeof window.__mgPopulateGapDoses === "function") {
+      window.__mgPopulateGapDoses(gDoseSel, gMedSel.value);
+    }
+  }
+  if (data.dose && gDoseSel) {
+    const opt = [...gDoseSel.options].find(o => o.value === data.dose || data.dose.includes(o.value));
+    if (opt) gDoseSel.value = opt.value;
+  }
+}
+
+function qtyToSupplyWeeks(qty) {
+  return Math.max(4, (parseInt(qty, 10) || 1) * 4);
 }
 
 function renderWorkflow(data) {
@@ -1467,7 +1554,11 @@ function renderEligibility(data) {
     [
       ["Medication", data.medication ? data.medication.replace("® Injectable Pen","").replace("®","").trim() : null],
       ["Dose", data.dose], ["BMI", data.bmi], ["Height", data.height],
-      ["Weight", data.weight], ["Age", data.age ? `${data.age} years` : null]
+      ["Weight", data.weight], ["Age", data.age ? `${data.age} years` : null],
+      ["Last Fulfilled", data.fulfilledDate ? `${data.fulfilledDate}${data.fulfilledOrderDate ? ` (order ${data.fulfilledOrderDate} + 3 days)` : ""}${data.fulfilledQty ? ` · ${data.fulfilledQty} pen(s)` : ""}` : null],
+      ["Expected last dose window", data.expectedLastDoseRange || null],
+      ["Step 3 last dose", data.declaredLastInjection || null],
+      ["Another provider", data.anotherProviderAnswer || null]
     ].forEach(([label, val]) => {
       if (!val && val !== 0) return;
       html += `<div class="info-row"><div class="info-row-label">${label}</div><div class="info-row-val">${val}</div></div>`;
@@ -1820,6 +1911,7 @@ document.addEventListener("DOMContentLoaded", () => {
       sel.innerHTML = '<option value="">Select...</option>' +
         dosesFor(drug).map(d => `<option value="${d}">${d}</option>`).join("");
     }
+    window.__mgPopulateGapDoses = populateDoseDropdown;
     fromDrug && fromDrug.addEventListener("change", () => populateDoseDropdown(fromDose, fromDrug.value));
     dateInp && dateInp.addEventListener("change", () => {
       const g = gapFromDate(dateInp.value);
@@ -1898,14 +1990,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const gTypeHint= document.getElementById("gap-type-hint");
     const gDateLab = document.getElementById("gap-date-label");
     let gapType = "normal";
+    const FULFILLED_GRACE_WEEKS = 2; // 1 wk late start + 1 wk tolerance after expected last dose
 
     function setGapType(t) {
       gapType = t;
       if (t === "normal") {
         gTypeN.style.background = "#f59e0b"; gTypeN.style.color = "white"; gTypeN.classList.add("active");
         gTypeS.style.background = "white";   gTypeS.style.color = "#d97706"; gTypeS.classList.remove("active");
-        if (gDateLab) gDateLab.textContent = "Last Order Date";
-        if (gTypeHint) gTypeHint.textContent = "Gap from last order date (standard transfer/repeat)";
+        if (gDateLab) gDateLab.textContent = "Fulfilled Date";
+        if (gTypeHint) gTypeHint.textContent = "Gap from fulfilled date + supply (+ 2 wk grace/tolerance)";
         if (gSupply) gSupply.disabled = false;
       } else {
         gTypeS.style.background = "#f59e0b"; gTypeS.style.color = "white"; gTypeS.classList.add("active");
@@ -1949,8 +2042,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const last = new Date(dateStr);
       const now = new Date();
       const totalWks = Math.max(0, Math.floor((now - last) / (1000 * 60 * 60 * 24 * 7)));
-      // Normal: gap = weeks since order date − supply duration. Switch: gap = weeks since last injection.
-      const gapWks = gapType === "normal" ? Math.max(0, totalWks - supply) : totalWks;
+      // Normal: gap = weeks since fulfilled − supply − 2 wk (1 wk late start + 1 wk tolerance).
+      // Switch: gap = weeks since last injection.
+      const gapWks = gapType === "normal"
+        ? Math.max(0, totalWks - supply - FULFILLED_GRACE_WEEKS)
+        : totalWks;
 
       let bucket, action, recDose, badge, badgeBg, badgeFg, note;
       if (gapWks <= 8) {
@@ -1991,7 +2087,7 @@ document.addEventListener("DOMContentLoaded", () => {
           <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
             <div>
               <div style="font-size:12px; font-weight:800; color:#92400e;">${gapType === "switch" ? "🔄 Switch gap" : "📦 Treatment gap"}: ${gapWks} weeks (${bucket})</div>
-              <div style="font-size:10px; color:#78350f; margin-top:3px;">${gapType === "normal" ? `${totalWks} wks since order − ${supply} wks supply` : `${totalWks} wks since last injection`}</div>
+              <div style="font-size:10px; color:#78350f; margin-top:3px;">${gapType === "normal" ? `${totalWks} wks since fulfilled − ${supply} wks supply − ${FULFILLED_GRACE_WEEKS} wks grace` : `${totalWks} wks since last injection`}</div>
             </div>
             <span style="padding:4px 8px; border-radius:999px; font-size:10px; font-weight:800; background:${badgeBg}; color:${badgeFg}; white-space:nowrap;">${badge}</span>
           </div>
