@@ -1001,6 +1001,48 @@ async function issueRx() {
 //    default hold reason from settings (chrome.storage.sync) and APPENDS
 //    anything the user typed in #hold-comment on a new line.
 const HOLD_BUILTIN_REASON = "Waiting for patient to upload documents.";
+const APPROVE_PATIENT_MESSAGE_BUILTIN = `Dear Patient,
+
+Your order has been approved and will now undergo a final clinical check by our pharmacist before being passed to our dispatch team.
+
+Please read the following information before using your medication:
+
+- Use your injection once weekly, preferably on the same day each week.
+- Follow the instructions supplied with your pen, as administration may differ between devices.
+- Inject into the abdomen, thigh or upper arm and rotate the injection site each week.
+- Use a new needle for every injection where required.
+- Store the medication as stated on the packaging and patient information leaflet. Do not freeze.
+- Do not increase your dose unless it has been approved by your prescriber.
+
+Common side effects include nausea, indigestion, reduced appetite, constipation, diarrhoea and vomiting. These may be more noticeable when starting treatment or increasing the dose.
+
+To help reduce side effects:
+
+- Eat smaller portions and stop eating when you feel full.
+- Avoid rich, greasy or high-fat foods.
+- Drink plenty of fluids.
+- Avoid eating large meals late at night.
+
+Please contact us before your next injection if your side effects are severe, persistent or affecting your ability to eat or drink.
+
+Follow the missed-dose instructions in the patient information leaflet, as these differ between medications.
+
+Stop using the medication and seek urgent medical advice if you experience:
+
+- Severe or persistent abdominal pain, particularly if it spreads to your back
+- Repeated vomiting or signs of dehydration
+- Yellowing of the skin or eyes
+- Swelling of the face, lips, tongue or throat
+- Difficulty breathing or signs of a severe allergic reaction
+
+Please read the patient information leaflet supplied with your medication before use.
+
+If you have any questions or concerns, please reply to this message.
+
+Kind regards,
+
+Mostafa Damghani
+EveryDayMeds`;
 function getHoldDefault() {
   return new Promise((resolve) => {
     try {
@@ -1008,6 +1050,15 @@ function getHoldDefault() {
         resolve((r && r.default_hold_reason) || HOLD_BUILTIN_REASON);
       });
     } catch (_) { resolve(HOLD_BUILTIN_REASON); }
+  });
+}
+function getApprovePatientMessage() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.sync.get(["default_approve_patient_message"], (r) => {
+        resolve((r && r.default_approve_patient_message) || APPROVE_PATIENT_MESSAGE_BUILTIN);
+      });
+    } catch (_) { resolve(APPROVE_PATIENT_MESSAGE_BUILTIN); }
   });
 }
 async function placeOnHold() {
@@ -1253,18 +1304,21 @@ async function bulkApproveOrUndo() {
     await new Promise(r => setTimeout(r, 180));
   }
 
-  // After a successful Approve-all sweep, auto-send the Patient Counselling
-  // template: jump to the Counselling tab, click the first visible (drug+dose
-  // matched) template card, then click "Send to patient". Best-effort — any
-  // failure is logged via toast but doesn't change the approval result.
+  // After a successful Approve-all sweep, send the configurable counselling
+  // message through encrypted patient chat. Best-effort — failure is logged
+  // via toast but does not change the approval result.
   if (mode === "approve" && ok > 0 && fail === 0) {
     try {
-      btn.innerHTML = `${SPIN_SVG}<span>Sending counselling…</span>`;
-      const cResp = await msgContent({ type: "COUNSELLING_AUTO_SEND" });
-      if (cResp?.success) {
-        toast(`✉ Counselling sent (${cResp.template || "template"})`, "success", 1800);
-      } else if (cResp?.error) {
-        toast(`Counselling not sent: ${cResp.error}`, "error", 2400);
+      btn.innerHTML = `${SPIN_SVG}<span>Sending patient message…</span>`;
+      const template = await getApprovePatientMessage();
+      const message = substituteEmail(template).trim();
+      if (message) {
+        const cResp = await msgContent({ type: "SEND_PATIENT_MESSAGE", text: message });
+        if (cResp?.success) {
+          toast("Counselling message sent to patient", "success", 1800);
+        } else if (cResp?.error) {
+          toast(`Message not sent: ${cResp.error}`, "error", 2400);
+        }
       }
     } catch (_) { /* silent */ }
   }

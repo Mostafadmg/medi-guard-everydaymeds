@@ -161,6 +161,16 @@
   </div>
 
   <div class="card">
+    <h2>Patient message on Approve <span class="badge badge-opt">Editable</span></h2>
+    <div class="help">
+      Sent automatically through encrypted patient chat when you click <strong>Approve</strong> in the side panel, after all steps are verified.
+      Use <code style="background:#f1f5f9;padding:1px 5px;border-radius:3px;">{patient_name}</code> anywhere in the message and it will be replaced with the current patient's name.
+    </div>
+    <label for="approvePatientMessageText" style="margin-top:12px;">Counselling message</label>
+    <textarea id="approvePatientMessageText" rows="18" placeholder="Dear Patient,&#10;&#10;Your order has been approved…"></textarea>
+  </div>
+
+  <div class="card">
     <h2>Quick comment buttons <span class="badge badge-opt">Editable</span></h2>
     <div class="help">
       Add chip buttons that show up above the "Your comment" textarea in the side panel.

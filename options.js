@@ -7,6 +7,48 @@ const BUILTIN_SCR_ACCESSED = "SCR accessed and checked no contraindication found
 const BUILTIN_COUNSELLING = "Patient has been contacted by email and provided counselling and information on their treatment. Patient can contact us at any time if they need further help or information.";
 const BUILTIN_RATIONALE = "The patient meets the service eligibility criteria. The consultation responses, medical history, current medication, allergies and supporting documentation have been reviewed. No known contraindications, clinically significant interactions, red flags or other concerns have been identified.\n\nBased on the information available at the time of assessment, prescribing is considered clinically appropriate. Appropriate counselling, monitoring, follow-up and safety-netting advice have been provided. Prescription approved.";
 const BUILTIN_HOLD = "Waiting for patient to upload documents.";
+const BUILTIN_APPROVE_PATIENT_MESSAGE = `Dear Patient,
+
+Your order has been approved and will now undergo a final clinical check by our pharmacist before being passed to our dispatch team.
+
+Please read the following information before using your medication:
+
+- Use your injection once weekly, preferably on the same day each week.
+- Follow the instructions supplied with your pen, as administration may differ between devices.
+- Inject into the abdomen, thigh or upper arm and rotate the injection site each week.
+- Use a new needle for every injection where required.
+- Store the medication as stated on the packaging and patient information leaflet. Do not freeze.
+- Do not increase your dose unless it has been approved by your prescriber.
+
+Common side effects include nausea, indigestion, reduced appetite, constipation, diarrhoea and vomiting. These may be more noticeable when starting treatment or increasing the dose.
+
+To help reduce side effects:
+
+- Eat smaller portions and stop eating when you feel full.
+- Avoid rich, greasy or high-fat foods.
+- Drink plenty of fluids.
+- Avoid eating large meals late at night.
+
+Please contact us before your next injection if your side effects are severe, persistent or affecting your ability to eat or drink.
+
+Follow the missed-dose instructions in the patient information leaflet, as these differ between medications.
+
+Stop using the medication and seek urgent medical advice if you experience:
+
+- Severe or persistent abdominal pain, particularly if it spreads to your back
+- Repeated vomiting or signs of dehydration
+- Yellowing of the skin or eyes
+- Swelling of the face, lips, tongue or throat
+- Difficulty breathing or signs of a severe allergic reaction
+
+Please read the patient information leaflet supplied with your medication before use.
+
+If you have any questions or concerns, please reply to this message.
+
+Kind regards,
+
+Mostafa Damghani
+EveryDayMeds`;
 const BUILTIN_QUICK_COMMENTS = [
   {
     name: "Repeat",
@@ -109,6 +151,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const counsellingInput = document.getElementById("counsellingText");
   const rationaleInput = document.getElementById("rationaleText");
   const holdInput = document.getElementById("holdReasonText");
+  const approvePatientMsgInput = document.getElementById("approvePatientMessageText");
   const saveBtn = document.getElementById("save");
   const resetBtn = document.getElementById("resetDefaults");
   const statusDiv = document.getElementById("status");
@@ -189,6 +232,7 @@ document.addEventListener("DOMContentLoaded", () => {
   chrome.storage.sync.get(
     ["server_url", "openai_key", "assistant_id", "initialized",
      "default_scr_text", "default_scr_accessed_text", "default_counselling_text", "default_rationale_text", "default_hold_reason",
+     "default_approve_patient_message",
      "quick_comment_buttons", "quick_hold_buttons", "email_macros", "ui_zoom", "show_workflow_steps"],
     (syncResult) => { chrome.storage.local.get(["email_macros", "email_macros_version"], (localResult) => {
       const result = Object.assign({}, syncResult, {
@@ -210,6 +254,7 @@ document.addEventListener("DOMContentLoaded", () => {
       counsellingInput.value = result.default_counselling_text || BUILTIN_COUNSELLING;
       rationaleInput.value = result.default_rationale_text || BUILTIN_RATIONALE;
       if (holdInput) holdInput.value = result.default_hold_reason || BUILTIN_HOLD;
+      if (approvePatientMsgInput) approvePatientMsgInput.value = result.default_approve_patient_message || BUILTIN_APPROVE_PATIENT_MESSAGE;
       const showStepsInput = document.getElementById("showWorkflowSteps");
       if (showStepsInput) showStepsInput.checked = result.show_workflow_steps !== false;
       const qcSaved = Array.isArray(result.quick_comment_buttons) ? result.quick_comment_buttons : null;
@@ -255,6 +300,7 @@ document.addEventListener("DOMContentLoaded", () => {
     counsellingInput.value = BUILTIN_COUNSELLING;
     rationaleInput.value = BUILTIN_RATIONALE;
     if (holdInput) holdInput.value = BUILTIN_HOLD;
+    if (approvePatientMsgInput) approvePatientMsgInput.value = BUILTIN_APPROVE_PATIENT_MESSAGE;
     const showStepsInput = document.getElementById("showWorkflowSteps");
     if (showStepsInput) showStepsInput.checked = true;
   });
@@ -268,6 +314,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const counsellingText = counsellingInput.value.trim();
     const rationaleText = rationaleInput.value.trim();
     const holdText = (holdInput?.value || "").trim();
+    const approvePatientMsgText = (approvePatientMsgInput?.value || "").trim();
     const showWorkflowSteps = document.getElementById("showWorkflowSteps")?.checked !== false;
 
     if (!serverUrl && !key) {
@@ -286,6 +333,7 @@ document.addEventListener("DOMContentLoaded", () => {
       default_counselling_text: counsellingText || BUILTIN_COUNSELLING,
       default_rationale_text: rationaleText || BUILTIN_RATIONALE,
       default_hold_reason: holdText || BUILTIN_HOLD,
+      default_approve_patient_message: approvePatientMsgText || BUILTIN_APPROVE_PATIENT_MESSAGE,
       quick_comment_buttons: qcMgr.read(),
       quick_hold_buttons: qhMgr.read(),
       show_workflow_steps: showWorkflowSteps,
