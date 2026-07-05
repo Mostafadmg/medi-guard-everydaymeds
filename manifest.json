@@ -38,7 +38,7 @@
         "https://*.replit.app/*",
         "https://*.replit.dev/*"
       ],
-      "js": ["content.js"],
+      "js": ["email-macros-data.js", "content.js"],
       "run_at": "document_end"
     },
     {

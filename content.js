@@ -102,6 +102,26 @@ function setFieldValue(el, value) {
   el.dispatchEvent(new Event("blur", { bubbles: true }));
 }
 
+const COMMS_TEXTAREA_MIN = 120;
+const COMMS_TEXTAREA_MAX = 600; // ~1.67× previous 360px cap
+
+function autoResizeTextarea(el, { min = COMMS_TEXTAREA_MIN, max = COMMS_TEXTAREA_MAX } = {}) {
+  if (!el || el.tagName !== "TEXTAREA") return;
+  el.style.setProperty("height", "auto", "important");
+  const next = Math.min(max, Math.max(min, el.scrollHeight));
+  el.style.setProperty("height", `${next}px`, "important");
+  el.style.overflowY = el.scrollHeight > max ? "auto" : "hidden";
+}
+
+function bindCommsInputAutoResize() {
+  const input = document.getElementById("od2CommsInput");
+  if (!input || input.dataset.mgAutoResize) return;
+  input.dataset.mgAutoResize = "1";
+  const resize = () => autoResizeTextarea(input);
+  input.addEventListener("input", resize);
+  resize();
+}
+
 function clickRxaRadio(input) {
   if (!input) return false;
   const label = input.closest("label.rxa-radio") || input.closest("label");
@@ -338,16 +358,18 @@ async function rxPlaceOnHold(reason, docs) {
 
 // Send a free-text message to the patient via the on-page encrypted chat composer.
 async function sendPatientChatMessage(text) {
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
   try {
     const message = (text || "").trim();
     if (!message) return { success: false, error: "Message is empty" };
 
-    const panel = document.getElementById("od2ChatPanel");
-    const fab = document.getElementById("od2ChatFab");
-    const panelOpen = panel && panel.classList.contains("is-open") && panel.getAttribute("aria-hidden") !== "true";
-    if (!panelOpen && fab) fab.click();
+    if (typeof window.__mgOpenCommsModal === "function") {
+      await window.__mgOpenCommsModal();
+    } else {
+      const fab = document.getElementById("od2ChatFab");
+      if (fab) fab.click();
+    }
 
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
     let input = null;
     for (let i = 0; i < 24; i++) {
       await sleep(100);
@@ -365,6 +387,7 @@ async function sendPatientChatMessage(text) {
     }
 
     setFieldValue(input, message);
+    autoResizeTextarea(input);
     input.focus();
 
     let sendBtn = null;
@@ -729,136 +752,6 @@ function enrichTreatmentGapData(data) {
   }
 }
 
-function mgSupplyCheckMedLabel(medication) {
-  if (!medication) return "medication";
-  return medication.replace(/\s*®\s*/g, "® ").trim();
-}
-
-function mgInjectSupplyCheckStyles() {
-  if (document.getElementById("mg-supply-check-styles")) return;
-  const style = document.createElement("style");
-  style.id = "mg-supply-check-styles";
-  style.textContent = `
-    #mg-supply-check-panel {
-      grid-column: 1 / -1;
-      width: 100%;
-      box-sizing: border-box;
-      margin: 0 0 16px;
-    }
-    #mg-supply-check-panel .mg-sc-shell {
-      background: #fffbeb;
-      border: 1px solid #fcd34d;
-      border-radius: 14px;
-      padding: 18px 20px;
-      box-shadow: 0 2px 10px rgba(245, 158, 11, 0.12);
-    }
-    #mg-supply-check-panel .mg-sc-head {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-    #mg-supply-check-panel .mg-sc-icon {
-      width: 28px; height: 28px; border-radius: 50%;
-      background: #fef3c7; color: #92400e;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 14px; flex-shrink: 0;
-    }
-    #mg-supply-check-panel .mg-sc-title {
-      font-size: 16px; font-weight: 800; color: #78350f; margin: 0 0 4px;
-    }
-    #mg-supply-check-panel .mg-sc-sub {
-      font-size: 13px; color: #92400e; line-height: 1.45; margin: 0;
-    }
-    #mg-supply-check-panel .mg-sc-detail {
-      background: #fff;
-      border: 1px solid #fde68a;
-      border-radius: 10px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
-    }
-    #mg-supply-check-panel .mg-sc-detail-title {
-      font-size: 14px; font-weight: 800; color: #78350f; margin: 0 0 8px;
-    }
-    #mg-supply-check-panel .mg-sc-detail p {
-      font-size: 13px; color: #57534e; line-height: 1.55; margin: 0 0 8px;
-    }
-    #mg-supply-check-panel .mg-sc-detail p:last-child { margin-bottom: 0; }
-    #mg-supply-check-panel .mg-sc-q {
-      font-size: 13px; font-weight: 700; color: #78350f; margin: 0 0 8px;
-    }
-    #mg-supply-check-panel .mg-sc-answer {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
-      border: 1px solid #fcd34d; background: #fff;
-    }
-    #mg-supply-check-panel .mg-sc-answer.is-yes { color: #9a3412; border-color: #fdba74; background: #fff7ed; }
-    #mg-supply-check-panel .mg-sc-answer.is-no { color: #166534; border-color: #86efac; background: #f0fdf4; }
-    #mg-supply-check-panel .mg-sc-answer.is-missing { color: #92400e; border-style: dashed; }
-    #mg-supply-check-panel .mg-sc-foot {
-      margin-top: 12px; padding-top: 12px; border-top: 1px solid #fde68a;
-      font-size: 12px; color: #92400e; font-weight: 600;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-function renderSupplyCheckPanel(data) {
-  const slot = document.getElementById("mg-inline-patient-card-slot")
-    || document.querySelector(".od2-wrap");
-  if (!slot) return;
-
-  let panel = document.getElementById("mg-supply-check-panel");
-  if (data?.supplyCheckRequired !== true) {
-    if (panel) panel.remove();
-    return;
-  }
-
-  mgInjectSupplyCheckStyles();
-  if (!panel) {
-    panel = document.createElement("div");
-    panel.id = "mg-supply-check-panel";
-    const card = document.getElementById("mg-inline-patient-card");
-    if (card?.nextSibling) slot.insertBefore(panel, card.nextSibling);
-    else slot.appendChild(panel);
-  }
-
-  const pens = data.fulfilledQty || 1;
-  const penLabel = pens === 1 ? "1 pen" : `${pens} pens`;
-  const med = mgSupplyCheckMedLabel(data.medication || "medication");
-  const range = data.expectedLastDoseRange || `${data.expectedLastDose || "—"} – ${data.expectedLastDoseOkUntil || "—"}`;
-  const entered = data.declaredLastInjection || "—";
-
-  let answerHtml = `<span class="mg-sc-answer is-missing">Not answered in consultation yet</span>`;
-  if (data.anotherProviderYes) {
-    answerHtml = `<span class="mg-sc-answer is-yes">Yes — obtained from another provider</span>`;
-  } else if (data.anotherProviderNo) {
-    answerHtml = `<span class="mg-sc-answer is-no">No — did not obtain elsewhere</span>`;
-  } else if (data.anotherProviderAnswer) {
-    answerHtml = `<span class="mg-sc-answer">${mgEscapeHtml(data.anotherProviderAnswer)}</span>`;
-  }
-
-  panel.innerHTML = `
-    <div class="mg-sc-shell">
-      <div class="mg-sc-head">
-        <div class="mg-sc-icon">!</div>
-        <div>
-          <div class="mg-sc-title">Check your supply</div>
-          <p class="mg-sc-sub">The patient's Step 3 last-dose date falls outside the period estimated from their previous fulfilled order. Apply safe restart rules before approving.</p>
-        </div>
-      </div>
-      <div class="mg-sc-detail">
-        <div class="mg-sc-detail-title">We need a bit more detail about the last dose</div>
-        <p>Based on the previous order (<strong>${penLabel}</strong>), the last dose from that supply would have been between <strong>${mgEscapeHtml(range)}</strong>. The date the patient entered in Step 3 (<strong>${mgEscapeHtml(entered)}</strong>) is outside that period.</p>
-        <p>At checkout the patient should answer the supply question below before dose options unlock in step 4.</p>
-      </div>
-      <div class="mg-sc-q">During this period, did they obtain ${mgEscapeHtml(med)} from another provider?</div>
-      ${answerHtml}
-      <div class="mg-sc-foot">${data.anotherProviderAnswer ? "Review the patient's answer and apply gap/restart SOP before approving." : "Patient has not answered the supply question — consider placing on hold and using the Last Injection Date macro."}</div>
-    </div>
-  `;
-}
-
 function updateEmInfoTiles(data) {
   if (!data) return;
   document.querySelectorAll(".em-info-tile").forEach(tile => {
@@ -1217,12 +1110,6 @@ function scrapeOrderData() {
   });
 
   enrichTreatmentGapData(data);
-  if (data.treatmentGapOk === false) {
-    data.flags.push({
-      level: "yellow",
-      text: `Treatment gap — declared last injection (${data.declaredLastInjection}) is after expected window (by ${data.expectedLastDoseOkUntil}). Ask if medication was used elsewhere.`
-    });
-  }
 
   return data;
 }
@@ -1685,7 +1572,6 @@ function performScan() {
 
   renderInlinePatientCard(data);
   updateEmInfoTiles(data);
-  renderSupplyCheckPanel(data);
   ensureInlinePatientCardObserver();
   try { ensureDecisionScrLink(); } catch (_) {}
 
@@ -4355,188 +4241,12 @@ try {
 // pill. Mirrors the contra modal's CSS/lifecycle pattern but with a simpler
 // flat structure (category tabs + search + clickable copy-list).
 // ═══════════════════════════════════════════════════════════════════════════
-const MG_MACRO_SIGNATURE = "Kind Regards,\nMostafa Damghani\nPharmacist Indpendant Prescriber";
-
-const MG_MACRO_DATA = {
-  categories: [
-    {
-      id: "scr",
-      label: "SCR / Clinical",
-      icon: "📋",
-      macros: [
-        {
-          name: "SCR Not Available — Request from GP",
-          tag: "SCR",
-          desc: "Patient SCR could not be retrieved; ask patient to request from GP.",
-          body: "Hello {patient_name},\n\nThank you for your recent order.\n\nWe were unable to access your Summary Care Record (SCR) at this time. Before we can proceed safely, please contact your GP surgery and ask them to ensure your Summary Care Record with Additional Information is enabled. Once this is in place, please reply to this message and we will reattempt the clinical check.\n\nWe appreciate your patience while we make sure your treatment is appropriate and safe.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Cancer History — Additional Info Required",
-          tag: "Clinical",
-          desc: "Patient has cancer history flagged on SCR; need details before approving.",
-          body: "Hello {patient_name},\n\nThank you for your recent order.\n\nOur clinical review of your Summary Care Record has flagged a history of cancer. Before we can safely continue your treatment, please reply with the following information:\n\n• Type of cancer\n• Date of diagnosis\n• Treatment received and current status (e.g. in remission, ongoing)\n• Confirmation of any current medication\n\nThis information is essential to ensure your safety. We will review as soon as you reply.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Thyroid Concern — MTC Screening",
-          tag: "Clinical",
-          desc: "Personal/family history of MTC or MEN2 reported.",
-          body: "Hello {patient_name},\n\nThank you for your recent order.\n\nDuring our clinical review we noticed a history relating to thyroid conditions. GLP-1 medications are not suitable for patients with a personal or family history of Medullary Thyroid Carcinoma (MTC) or Multiple Endocrine Neoplasia syndrome type 2 (MEN2).\n\nPlease confirm:\n• The exact type of thyroid condition\n• Whether there is any family history of MTC or MEN2\n• Any current thyroid medication you take\n\nWe will review your reply and update you as soon as possible.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "transfer",
-      label: "Transfer / PUE",
-      icon: "🔁",
-      macros: [
-        {
-          name: "Transfer From Another Provider — Proof Required",
-          tag: "Transfer",
-          desc: "Ask patient for proof of previous prescription before transferring dose.",
-          body: "Hello {patient_name},\n\nThank you for choosing us to continue your GLP-1 treatment.\n\nTo safely transfer you onto your current dose, please reply with proof of your most recent prescription from your previous provider. This can be:\n\n• A photo of the pen/box label showing dose and date dispensed\n• A copy of the prescription itself\n• A screenshot of the order confirmation from your previous pharmacy\n\nOnce we have this we can complete your clinical check and dispatch your order without delay.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Previously Used Elsewhere (PUE) — Dose Confirmation",
-          tag: "PUE",
-          desc: "Patient indicated prior use; confirm last dose & duration.",
-          body: "Hello {patient_name},\n\nThank you for your order.\n\nYou have indicated previous use of a GLP-1 medication. Before we proceed, please confirm:\n\n• The medication name and dose last taken\n• The date of your most recent injection\n• How long you were on that dose\n• The reason for stopping (if applicable)\n\nThis allows us to titrate you safely and avoid an unsuitable dose increase.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Last Injection Date",
-          tag: "PUE",
-          desc: "Ask patient to confirm date & strength of last injection.",
-          body: "Hello there,\n\nThank you for getting back in touch.\n\nBased on the information currently available to us, it appears that your last weight loss injection may have been more than 4 weeks ago.\n\nTo help us safely assess your order and determine the most appropriate treatment plan, could you please confirm:\n\n- The date of your last injection\n- The strength/dose of your last injection\n- Whether you have received any treatment from another provider during this period\n\nIf there has been a prolonged break in treatment, it may be necessary for safety reasons to restart from a lower dose and gradually re-titrate. This helps reduce the risk of significant gastrointestinal side effects and improves treatment tolerability.\n\nYour order will remain on hold until we receive the requested information and the clinical team has been able to review it.\n\nOnce we receive your response, we will be able to continue reviewing your order.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Invalid Previous Prescription Evidence",
-          tag: "PUE",
-          desc: "Previous-use evidence missing or doesn't meet criteria.",
-          body: "Dear Patient,\n\nWe are contacting you as your previous use evidence of weight loss injection has either not been uploaded, or the uploaded evidence does not currently meet the required criteria for clinical review.\n\nIf you have been asked to provide proof of previous use, please upload suitable evidence such as:\n\n- Dispensing label\n- Prescription\n- Order confirmation\n- Previous provider letter or correspondence\n\nThe uploaded document must clearly show:\n\n- Previous provider name\n- Full name of the patient\n- Name and strength of the medication\n- Date the prescription was issued or the order/dispensing date\n\nPlease ensure the document is clear, readable, and not cropped or blurred.\n\nTo help avoid delays in processing your order, please ensure the uploaded evidence meets all the above criteria. Your order may remain on hold until suitable evidence has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "titration",
-      label: "Titration",
-      icon: "📈",
-      macros: [
-        {
-          name: "Dose Increase Too Soon",
-          tag: "Titration",
-          desc: "Patient requested next dose before 4-week minimum interval.",
-          body: "Hello {patient_name},\n\nThank you for your recent order.\n\nFor your safety, GLP-1 doses should only be increased after a minimum of 4 weeks on your current strength. Our records show your last dose has not yet reached this interval, so we are unable to authorise the increase at this time.\n\nPlease reorder once you have completed 4 full weeks on your current dose. If you are experiencing side effects or have any concerns, reply to this message and we will be happy to review.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Hold Current Dose — Side Effects",
-          tag: "Titration",
-          desc: "Recommend staying on current dose due to ongoing side effects.",
-          body: "Hello {patient_name},\n\nThank you for your message and for letting us know about the side effects you have been experiencing.\n\nGiven what you have described, we recommend remaining on your current dose for a further 4 weeks before considering a step up. This gives your body more time to adjust and usually improves tolerability.\n\nIf symptoms persist, worsen, or you have any new concerns, please reply and we will review again.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "id",
-      label: "ID / Photos",
-      icon: "🪪",
-      macros: [
-        {
-          name: "ID Photo Request",
-          tag: "Identity",
-          desc: "Request photo ID to verify patient identity.",
-          body: "Hello {patient_name},\n\nThank you for your recent order.\n\nBefore we can dispatch your prescription, we need to verify your identity. Please reply with a clear photo of one of the following:\n\n• Passport\n• UK driving licence (photo card)\n• National identity card\n\nMake sure the photo is well-lit and all four corners are visible. Your details will be kept securely in line with our privacy policy.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Selfie + Pen Photo Request",
-          tag: "Identity",
-          desc: "Request a selfie holding their current pen for safeguarding.",
-          body: "Hello {patient_name},\n\nThank you for your recent order.\n\nAs part of our safeguarding checks, please reply with a clear photo of yourself holding your current GLP-1 pen so we can confirm the medication and dose. The label on the pen should be visible in the picture.\n\nOnce received we will continue with your clinical check.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "weight",
-      label: "Weight Changes",
-      icon: "⚖️",
-      macros: [
-        {
-          name: "BMI Below Threshold",
-          tag: "Weight",
-          desc: "Patient BMI now below treatment threshold — pause therapy.",
-          body: "Hello {patient_name},\n\nThank you for your recent order and for updating your weight.\n\nBased on the figures provided, your BMI is now below the threshold for ongoing GLP-1 treatment. For your safety we are unable to dispatch a further prescription at this time.\n\nWe would be very happy to discuss maintenance options or alternative support — just reply to this message and we will guide you on the next steps.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Insufficient Weight Loss — Review",
-          tag: "Weight",
-          desc: "Limited weight change after several months — review fit/lifestyle.",
-          body: "Hello {patient_name},\n\nThank you for your continued updates.\n\nLooking at your progress over the last few months, the response to treatment has been more modest than we would expect at this stage. Before issuing your next prescription, please reply with a short update on:\n\n• Diet and physical activity changes since starting\n• Any side effects experienced\n• Any other medication started recently\n\nThis helps us tailor the plan and decide whether to continue, adjust dose, or consider alternatives.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "gap",
-      label: "Gap in Treatment",
-      icon: "⏸️",
-      macros: [
-        {
-          name: "Restart After Short Gap (<4 weeks)",
-          tag: "Gap",
-          desc: "Patient missed <4 weeks — safe to resume current dose.",
-          body: "Hello {patient_name},\n\nThank you for getting back in touch.\n\nAs your break from treatment has been under 4 weeks, you can safely resume on your previous dose. We have approved your order on this basis. If you experience any unusual side effects on restarting, please reply and we will review.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Restart After Long Gap (>4 weeks) — Re-titrate",
-          tag: "Gap",
-          desc: "Gap >4 weeks — restart from the lowest dose and re-titrate.",
-          body: "Hello {patient_name},\n\nThank you for getting back in touch.\n\nAs your break from treatment has been longer than 4 weeks, for your safety we will need to restart you from the lowest starting dose and titrate up gradually. This reduces the risk of significant side effects.\n\nWe have updated your order accordingly. If you have any questions about the re-titration plan, just reply and we will be happy to help.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "docs",
-      label: "Documents / Videos",
-      icon: "📎",
-      macros: [
-        {
-          name: "Invalid Documents — Full Upload Request",
-          tag: "Docs",
-          desc: "Omnibus chase: ID + body video + weight scale video + previous-use evidence.",
-          body: "Dear Patient,\n\nWe are contacting you to ask that you upload the required documents to your account so we can pass your order to the clinical team for review.\n\nIf you have not already done so, please upload the following documents ensuring they meet the criteria below:\n\n- A valid photo ID. The ID must be clear, readable, and in date. Please ensure all four corners of the document are visible and the details can be clearly read by the clinical team.\n\n- A full body video showing your full body in good lighting, wearing fitted clothing that clearly shows your body shape. This is required for us to verify your BMI.\n\n- A weight scale video showing both your face and the reading on the scale clearly visible and readable for the clinical team to proceed with your order.\n\nIf you are a transfer patient (previously recieved weightloss injection from a differenet provider), or have been asked to provide proof of previous use, please upload evidence such as:\n\n- Dispensing label\n- Prescription\n- Order confirmation letter\n- Previous provider correspondence\n\nThe document must clearly show:\n\n- Previous provider name\n- Full name of the patient\n- Date the prescription was issued or the order/dispensed date\n- Name and strength of the medication\n\nIf you are a starter patient and have not been asked to provide previous use proof, please ignore this section.\n\nTo help avoid delays in processing your order, please ensure the uploaded evidence meets all the above criteria. Your order may remain on hold until suitable evidence has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, the clinical team will be able to continue reviewing your order.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Invalid Weight Scale Video",
-          tag: "Video",
-          desc: "Re-request a valid weight scale video.",
-          body: "Dear Patient,\n\nWe are contacting you as the weight scale video has either not been uploaded, or the uploaded video does not currently meet the required criteria for clinical review.\n\nPlease upload a new weight scale video that meets the following requirements:\n\n- Your face must be clearly visible\n- The reading on the scale must be clearly visible and readable\n- The video should be clear and taken in good lighting\n- The weight reading should be shown while standing on the scale\n\nTo help avoid delays in processing your order, please ensure the uploaded video meets all the above criteria. Your order may remain on hold until a suitable video has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Invalid Full Body Video",
-          tag: "Video",
-          desc: "Re-request a valid full body video.",
-          body: "Dear Patient,\n\nWe are contacting you as the full body video has either not been uploaded, or the uploaded video does not currently meet the required criteria for clinical review.\n\nPlease upload a full body video that meets the following criteria so we can pass your order to the clinical team for review:\n\n- Full body visible from head to toe\n- Face clearly visible and facing the camera\n- Good lighting with the body clearly visible\n- Wear fitted clothing that shows body shape clearly\n- Avoid loose or baggy clothing such as jumpers, oversized tops, or hoodies\n- Avoid dark clothing where possible, as this can make body shape difficult to assess\n- Video should be clear and not blurred\n\nTo help avoid delays in processing your order, please ensure the uploaded video meets all the above criteria. Your order may remain on hold until a suitable video has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + MG_MACRO_SIGNATURE
-        },
-        {
-          name: "Invalid WS / FB Videos (Both)",
-          tag: "Video",
-          desc: "Re-request both weight scale AND full body videos together.",
-          body: "Dear Patient,\n\nWe are contacting you as the Weight Scale Video and Full Body Video has either not been uploaded, or the uploaded video does not currently meet the required criteria for clinical review.\n\nPlease upload new videos that meet the following requirements:\n\nFull body video:\n\n- Full body visible from head to toe\n- Face clearly visible and facing the camera\n- Good lighting with the body clearly visible\n- Wear fitted clothing that shows body shape clearly\n- Avoid loose or baggy clothing such as jumpers, oversized tops, or hoodies\n- Avoid dark clothing where possible, as this can make body shape difficult to assess\n- Video should be clear and not blurred\n\nWeight scale video:\n\n- Your face must be clearly visible in the video\n- The reading on the scale must be clearly visible and readable\n- Video should be clear and taken in good lighting\n- The weight reading should be shown while standing on the scale\n\nTo help avoid delays in processing your order, please ensure the uploaded videos meet all the above criteria. Your order may remain on hold until suitable videos have been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    },
-    {
-      id: "general",
-      label: "General",
-      icon: "💬",
-      macros: [
-        {
-          name: "Need More Info",
-          tag: "General",
-          desc: "Generic chase template — fill in the {Please provide details here} bracket.",
-          body: "Dear Patient,\n\nAfter reviewing your request, we require some additional information from you in order to safely process your order.\n\nYour order will remain on hold until we receive the requested information and the clinical team has been able to review it.\n\nWe would appreciate it if you could provide more information regarding the following:\n\n{Please provide details here}\n\nOnce we receive the requested information, we will be able to continue reviewing your order.\n\n" + MG_MACRO_SIGNATURE
-        }
-      ]
-    }
-  ]
-};
+function getBuiltinMacroCategories() {
+  if (typeof EDMS_MACRO_CATEGORIES !== 'undefined' && Array.isArray(EDMS_MACRO_CATEGORIES)) {
+    return EDMS_MACRO_CATEGORIES.slice();
+  }
+  return [];
+}
 
 function getSavedEmailMacrosForPopout() {
   return new Promise((resolve) => {
@@ -4561,7 +4271,7 @@ function getSavedEmailMacrosForPopout() {
 
 async function getMacroCategoriesForPopout() {
   const saved = await getSavedEmailMacrosForPopout();
-  const base = Array.isArray(MG_MACRO_DATA.categories) ? MG_MACRO_DATA.categories.slice() : [];
+  const base = getBuiltinMacroCategories();
   if (!saved.length) return base;
   return [
     {
@@ -4575,8 +4285,8 @@ async function getMacroCategoriesForPopout() {
 }
 
 function injectMacroModal() {
-  if (document.getElementById("mg-macro-tab") && document.getElementById("mg-macro-panel")) return;
-  ["mg-macro-styles", "mg-macro-tab", "mg-macro-panel"].forEach(id => {
+  if (document.getElementById("mg-macro-backdrop") && document.getElementById("mg-macro-panel")) return;
+  ["mg-macro-styles", "mg-macro-tab", "mg-macro-backdrop", "mg-macro-panel"].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.parentNode) el.parentNode.removeChild(el);
   });
@@ -4584,90 +4294,93 @@ function injectMacroModal() {
     try { window.removeEventListener("keydown", window.__mgMacroKeydown); } catch (_) {}
     window.__mgMacroKeydown = null;
   }
-  if (window.__mgMacroOutsideClick) {
-    try { document.removeEventListener("mousedown", window.__mgMacroOutsideClick, true); } catch (_) {}
-    window.__mgMacroOutsideClick = null;
-  }
 
   const style = document.createElement("style");
   style.id = "mg-macro-styles";
   style.textContent = `
     #mg-macro-tab {
-      position: fixed !important; left: 20px !important; bottom: 20px !important;
+      display: inline-flex !important; align-items: center !important; gap: 6px !important;
       background: #7c3aed !important; color: #fff !important;
-      padding: 12px 18px 12px 16px !important;
-      border-radius: 999px !important;
+      padding: 8px 14px !important; border-radius: 8px !important;
       cursor: pointer !important; z-index: 2147483000 !important;
-      font: 700 14px/1 Inter, "Segoe UI", Arial, Helvetica, sans-serif !important;
-      box-shadow: 0 8px 20px rgba(124,58,237,0.35), 0 2px 6px rgba(0,0,0,0.15) !important;
+      font: 700 12.5px/1 Inter, "Segoe UI", Arial, Helvetica, sans-serif !important;
+      box-shadow: 0 4px 14px rgba(124,58,237,0.28) !important;
       letter-spacing: 0.01em !important; user-select: none !important;
       border: none !important; outline: none !important;
-      display: inline-flex !important; align-items: center !important; gap: 8px !important;
-      transition: transform .15s ease, background .15s ease, box-shadow .15s ease !important;
+      transition: transform .15s ease, background .15s ease !important;
       margin: 0 !important;
+    }
+    #mg-macro-tab {
+      position: fixed !important; left: 20px !important; bottom: 20px !important;
+      padding: 12px 18px 12px 16px !important; border-radius: 999px !important;
+      font-size: 14px !important;
+      box-shadow: 0 8px 20px rgba(124,58,237,0.35), 0 2px 6px rgba(0,0,0,0.15) !important;
     }
     #mg-macro-tab:hover { background: #6d28d9 !important; transform: translateY(-1px); }
     #mg-macro-tab svg { width: 18px; height: 18px; }
 
+    #mg-macro-backdrop {
+      position: fixed !important; inset: 0 !important;
+      background: rgba(2, 6, 23, 0.62) !important;
+      backdrop-filter: blur(4px) !important;
+      z-index: 2147482999 !important;
+      opacity: 0; pointer-events: none;
+      transition: opacity .22s ease !important;
+    }
+    #mg-macro-backdrop.open { opacity: 1; pointer-events: auto; }
+
     #mg-macro-panel {
-      position: fixed !important; left: 20px !important; bottom: 78px !important;
-      width: 1100px !important; max-width: calc(100vw - 40px) !important;
-      height: 760px !important; max-height: calc(100vh - 160px) !important;
+      position: fixed !important; left: 50% !important; top: 50% !important;
+      transform: translate(-50%, -48%) scale(.96) !important;
+      width: min(1280px, calc(100vw - 24px)) !important;
+      height: min(900px, calc(100vh - 32px)) !important;
       background: #0f172a !important; color: #e2e8f0 !important;
-      border-radius: 14px !important; border: 1px solid #1e293b !important;
-      box-shadow: 0 24px 60px rgba(0,0,0,0.55) !important;
+      border-radius: 16px !important; border: 1px solid #334155 !important;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.55) !important;
       overflow: hidden !important; display: flex !important; flex-direction: column !important;
-      transform: translateY(20px) scale(.98); opacity: 0;
-      pointer-events: none; transition: all .22s ease;
+      opacity: 0; pointer-events: none;
+      transition: opacity .22s ease, transform .22s ease !important;
       z-index: 2147483000 !important;
       font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif !important;
     }
-    #mg-macro-panel.open { transform: translateY(0) scale(1); opacity: 1; pointer-events: auto; }
+    #mg-macro-panel.open {
+      opacity: 1 !important; pointer-events: auto !important;
+      transform: translate(-50%, -50%) scale(1) !important;
+    }
     body.swal2-shown #mg-macro-panel,
+    body.swal2-shown #mg-macro-backdrop,
     body.swal2-shown #mg-macro-tab { display: none !important; }
 
     #mg-macro-panel .mg-mac-header {
       display: flex; align-items: center; gap: 12px;
-      padding: 14px 18px;
+      padding: 14px 18px; flex-shrink: 0;
       background: linear-gradient(90deg, #8b5cf6, #7c3aed);
       color: #fff; border-bottom: 1px solid #6d28d9;
     }
     #mg-macro-panel .mg-mac-header .mg-mac-logo {
       width: 38px; height: 38px; border-radius: 9px;
-      background: rgba(255,255,255,0.18); display: grid; place-items: center;
-      font-size: 18px;
+      background: rgba(255,255,255,0.18); display: grid; place-items: center; font-size: 18px;
     }
     #mg-macro-panel .mg-mac-titles { flex: 1; min-width: 0; }
     #mg-macro-panel .mg-mac-title { font-weight: 800; font-size: 16px; line-height: 1.2; }
     #mg-macro-panel .mg-mac-subtitle { font-size: 11.5px; opacity: 0.9; margin-top: 2px; }
     #mg-macro-close {
       background: rgba(255,255,255,0.18); border: none; color: #fff;
-      width: 28px; height: 28px; border-radius: 50%;
-      cursor: pointer; font-size: 14px; line-height: 1;
+      width: 32px; height: 32px; border-radius: 50%;
+      cursor: pointer; font-size: 16px; line-height: 1;
       display: grid; place-items: center;
     }
     #mg-macro-close:hover { background: rgba(255,255,255,0.32); }
 
-    #mg-macro-cat-tabs {
-      display: flex; flex-wrap: wrap; gap: 8px;
-      padding: 12px 14px 4px;
-      background: #0f172a;
-    }
-    #mg-macro-cat-tabs .mg-mac-cat-tab {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 14px; border-radius: 10px;
-      background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
-      font-size: 12.5px; font-weight: 600; cursor: pointer;
-      transition: all .15s ease;
-    }
-    #mg-macro-cat-tabs .mg-mac-cat-tab:hover { background: #283548; color: #fff; }
-    #mg-macro-cat-tabs .mg-mac-cat-tab.active {
-      background: linear-gradient(180deg, #8b5cf6, #7c3aed);
-      color: #fff; border-color: #6d28d9;
-      box-shadow: 0 4px 12px rgba(124,58,237,0.35);
-    }
+    .mg-mac-body { display: flex; flex: 1; min-height: 0; }
 
-    #mg-macro-search-wrap { padding: 10px 14px 12px; background: #0f172a; border-bottom: 1px solid #1e293b; }
+    #mg-macro-sidebar {
+      width: 340px; flex-shrink: 0;
+      display: flex; flex-direction: column;
+      border-right: 1px solid #1e293b;
+      background: #0b1220;
+    }
+    #mg-macro-search-wrap { padding: 12px; border-bottom: 1px solid #1e293b; }
     #mg-macro-search {
       width: 100%; box-sizing: border-box;
       padding: 10px 12px 10px 36px; border-radius: 10px;
@@ -4678,41 +4391,176 @@ function injectMacroModal() {
     #mg-macro-search::placeholder { color: #64748b; }
     #mg-macro-search:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
 
-    #mg-macro-content {
-      flex: 1; overflow-y: auto; padding: 14px 16px 22px;
-      background: #0b1220;
+    #mg-macro-cat-nav {
+      padding: 8px; border-bottom: 1px solid #1e293b;
+      max-height: 200px; overflow-y: auto;
     }
-    #mg-macro-content::-webkit-scrollbar { width: 8px; }
-    #mg-macro-content::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    #mg-macro-cat-nav .mg-mac-cat-item {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; text-align: left;
+      padding: 8px 10px; margin-bottom: 4px;
+      border-radius: 8px; border: 1px solid transparent;
+      background: transparent; color: #94a3b8;
+      font: 600 12px/1.3 inherit; cursor: pointer;
+      transition: all .12s ease;
+    }
+    #mg-macro-cat-nav .mg-mac-cat-item:hover { background: #1e293b; color: #e2e8f0; }
+    #mg-macro-cat-nav .mg-mac-cat-item.active {
+      background: rgba(139,92,246,0.15); color: #e9d5ff;
+      border-color: rgba(139,92,246,0.35);
+    }
+    #mg-macro-cat-nav .mg-mac-cat-count {
+      margin-left: auto; font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px;
+      background: #1e293b; color: #64748b;
+    }
+    #mg-macro-cat-nav .mg-mac-cat-item.active .mg-mac-cat-count {
+      background: rgba(139,92,246,0.25); color: #c4b5fd;
+    }
 
-    .mg-mac-card {
-      background: #0f172a; border: 1px solid #1e293b; border-radius: 10px;
-      padding: 12px 14px; margin: 0 0 10px;
-      transition: border-color .15s ease, transform .05s ease;
+    #mg-macro-list {
+      flex: 1; overflow-y: auto; padding: 6px 8px 12px;
     }
-    .mg-mac-card:hover { border-color: #475569; }
-    .mg-mac-card-head {
-      display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+    #mg-macro-list::-webkit-scrollbar, #mg-macro-detail-preview::-webkit-scrollbar,
+    #mg-macro-cat-nav::-webkit-scrollbar { width: 7px; }
+    #mg-macro-list::-webkit-scrollbar-thumb, #mg-macro-detail-preview::-webkit-scrollbar-thumb,
+    #mg-macro-cat-nav::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+    .mg-mac-list-item {
+      display: block; width: 100%; text-align: left;
+      padding: 10px 12px; margin-bottom: 4px;
+      border-radius: 8px; border: 1px solid transparent;
+      background: transparent; color: #cbd5e1; cursor: pointer;
+      font-family: inherit; transition: all .12s ease;
     }
-    .mg-mac-card-name {
-      flex: 1; font-weight: 700; color: #f1f5f9; font-size: 13.5px; line-height: 1.3;
+    .mg-mac-list-item:hover { background: #1e293b; border-color: #334155; }
+    .mg-mac-list-item.active {
+      background: linear-gradient(90deg, rgba(139,92,246,0.2), rgba(124,58,237,0.12));
+      border-color: rgba(139,92,246,0.45); color: #f8fafc;
     }
-    .mg-mac-tag {
-      flex-shrink: 0; display: inline-block;
-      padding: 3px 9px; border-radius: 999px;
+    .mg-mac-list-item-name { font-weight: 700; font-size: 12.5px; line-height: 1.35; }
+    .mg-mac-list-item-meta { font-size: 10.5px; color: #64748b; margin-top: 3px; }
+    .mg-mac-list-item.active .mg-mac-list-item-meta { color: #a78bfa; }
+    .mg-mac-list-item.custom-item {
+      border: 1px dashed rgba(139,92,246,0.35);
+      margin-bottom: 10px;
+    }
+    .mg-mac-list-item.custom-item.active {
+      border-style: solid;
+    }
+    .mg-mac-list-group {
+      padding: 8px 8px 4px; font-size: 10px; font-weight: 800;
+      letter-spacing: 0.06em; text-transform: uppercase; color: #64748b;
+    }
+
+    #mg-macro-detail {
+      flex: 1; min-width: 0; display: flex; flex-direction: column;
+      background: #0f172a;
+    }
+    #mg-macro-detail-empty {
+      flex: 1; display: grid; place-items: center;
+      color: #64748b; font-size: 14px; padding: 40px; text-align: center;
+    }
+    #mg-macro-detail-content { flex: 1; display: none; flex-direction: column; min-height: 0; }
+    #mg-macro-detail-content.visible { display: flex; }
+    #mg-macro-detail-head { padding: 12px 20px 10px; border-bottom: 1px solid #1e293b; }
+    #mg-macro-detail-head.compact { padding: 8px 20px 6px; }
+    #mg-macro-detail-title-row {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    }
+    #mg-macro-detail-name { font-weight: 800; font-size: 17px; color: #f8fafc; line-height: 1.2; }
+    #mg-macro-detail-head.compact #mg-macro-detail-name { font-size: 15px; }
+    #mg-macro-detail-desc { color: #94a3b8; font-size: 13px; margin-top: 4px; line-height: 1.35; }
+    #mg-macro-detail-head.compact #mg-macro-detail-desc { font-size: 12px; margin-top: 2px; }
+    #mg-macro-detail-tag {
+      display: inline-block; margin-top: 0;
+      padding: 2px 8px; border-radius: 999px;
       background: rgba(139,92,246,0.18); color: #c4b5fd;
       border: 1px solid rgba(139,92,246,0.4);
-      font-size: 10.5px; font-weight: 700;
-      letter-spacing: 0.04em; text-transform: uppercase;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
     }
-    .mg-mac-desc {
-      color: #94a3b8; font-size: 12px; line-height: 1.5; margin-bottom: 10px;
+    #mg-macro-detail-preview {
+      flex: 1; width: 100%; box-sizing: border-box;
+      margin: 0; padding: 16px 20px;
+      overflow-y: auto; resize: none;
+      white-space: pre-wrap; word-break: break-word;
+      color: #e2e8f0; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: #0b1220; border: none; outline: none;
+      min-height: 320px;
     }
-    .mg-mac-actions { display: flex; gap: 8px; }
+    #mg-macro-detail-preview:focus {
+      box-shadow: inset 0 0 0 2px rgba(139,92,246,0.4);
+      background: #0d1526;
+    }
+    #mg-macro-custom-tabs {
+      display: flex; gap: 8px; padding: 12px 20px 0; flex-shrink: 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    #mg-macro-custom-tabs[hidden] { display: none !important; }
+    .mg-custom-tab {
+      flex: 1; padding: 10px 12px; border: 1px solid transparent;
+      border-radius: 10px 10px 0 0; background: transparent;
+      color: #94a3b8; font-size: 12px; font-weight: 700; cursor: pointer;
+      font-family: inherit; transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .mg-custom-tab:hover { color: #cbd5e1; background: rgba(15,23,42,0.5); }
+    .mg-custom-tab.active {
+      background: #0b1220; color: #e9d5ff;
+      border-color: #334155; border-bottom-color: #0b1220;
+    }
+    #mg-macro-write-pane, #mg-macro-ai-pane {
+      flex: 1; display: flex; flex-direction: column; min-height: 0;
+    }
+    #mg-macro-write-pane[hidden], #mg-macro-ai-pane[hidden] { display: none !important; }
+    #mg-macro-ai-intro {
+      padding: 14px 20px 0; font-size: 12px; color: #94a3b8; line-height: 1.45; flex-shrink: 0;
+    }
+    #mg-macro-ai-pane label {
+      display: block; padding: 10px 20px 6px; font-size: 10px; font-weight: 700;
+      letter-spacing: 0.06em; text-transform: uppercase; color: #a78bfa;
+    }
+    #mg-macro-ai-pane label[hidden] { display: none !important; }
+    #mg-macro-ai-prompt, #mg-macro-ai-result {
+      margin: 0 20px; width: calc(100% - 40px); box-sizing: border-box;
+      min-height: 88px; max-height: 160px; padding: 12px 14px;
+      border-radius: 10px; border: 1px solid #334155; background: #0b1220;
+      color: #e2e8f0; font-size: 13px; line-height: 1.5; resize: vertical;
+      font-family: inherit; outline: none;
+    }
+    #mg-macro-ai-result {
+      flex: 1; min-height: 140px; max-height: none;
+      font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    #mg-macro-ai-prompt:focus, #mg-macro-ai-result:focus {
+      border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.25);
+    }
+    #mg-macro-ai-prompt::placeholder { color: #64748b; }
+    .mg-macro-ai-actions {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+      padding: 12px 20px; flex-shrink: 0;
+    }
+    #mg-macro-ai-result-actions {
+      display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 16px; flex-shrink: 0;
+    }
+    #mg-macro-ai-result-actions[hidden] { display: none !important; }
+    #mg-macro-ai-status {
+      font-size: 11.5px; color: #94a3b8; flex: 1; min-width: 120px;
+    }
+    #mg-macro-ai-status.error { color: #f87171; }
+    #mg-macro-ai-status.success { color: #4ade80; }
+    .mg-mac-btn.ai-btn {
+      background: linear-gradient(180deg, #a855f7, #9333ea);
+      box-shadow: 0 3px 8px rgba(147,51,234,0.35);
+    }
+    .mg-mac-btn.ai-btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
+    #mg-macro-detail-actions {
+      display: flex; gap: 10px; padding: 14px 20px;
+      border-top: 1px solid #1e293b; background: #0f172a; flex-shrink: 0;
+    }
     .mg-mac-btn {
       display: inline-flex; align-items: center; gap: 6px;
-      padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer;
-      font: 700 12px/1 inherit; letter-spacing: 0.02em;
+      padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer;
+      font: 700 12.5px/1 inherit; letter-spacing: 0.02em;
       background: linear-gradient(180deg, #8b5cf6, #7c3aed);
       color: #fff; box-shadow: 0 3px 8px rgba(124,58,237,0.3);
       transition: transform .08s ease, box-shadow .15s ease;
@@ -4723,33 +4571,113 @@ function injectMacroModal() {
       background: #1e293b; color: #cbd5e1; border: 1px solid #334155; box-shadow: none;
     }
     .mg-mac-btn.secondary:hover { background: #283548; color: #fff; }
-
-    .mg-mac-preview {
-      margin-top: 10px; padding: 12px;
-      background: #0b1220; border: 1px solid #1e293b; border-radius: 8px;
-      color: #cbd5e1; font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow-y: auto;
-      display: none;
+    .mg-mac-btn.chat-btn {
+      background: linear-gradient(180deg, #3b82f6, #2563eb);
+      box-shadow: 0 3px 8px rgba(37,99,235,0.3);
     }
-    .mg-mac-preview.open { display: block; }
-
     .mg-mac-empty {
-      padding: 24px; text-align: center; color: #94a3b8; font-size: 13px;
-      background: #0f172a; border: 1px dashed #334155; border-radius: 10px;
+      padding: 20px 12px; text-align: center; color: #64748b; font-size: 12.5px;
     }
-    .mg-mac-cat-header {
-      display: inline-block; padding: 5px 12px; border-radius: 6px;
-      background: rgba(139,92,246,0.18); color: #c4b5fd;
-      font-weight: 800; font-size: 11px; letter-spacing: 0.08em;
-      text-transform: uppercase; margin: 14px 0 8px;
-      border-left: 3px solid #8b5cf6;
-    }
-    .mg-mac-cat-header.first { margin-top: 2px; }
     .mg-mac-hl { background: rgba(250,204,21,0.35); color: #fef9c3; padding: 0 2px; border-radius: 2px; font-weight: 700; }
+
+    .od2-comms-composer { position: relative; }
+
+    /* Hide native floating chat — only visible inside our modal */
+    .od2-chat-panel:not(.mg-comms-embedded) {
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      position: fixed !important;
+      left: -10000px !important;
+      top: auto !important;
+      bottom: 0 !important;
+      width: 1px !important;
+      height: 1px !important;
+      overflow: hidden !important;
+      z-index: -1 !important;
+    }
+    #mg-comms-chat-slot {
+      display: none;
+      flex: 1.2;
+      min-width: 480px;
+      min-height: 0;
+      background: #f8fafc;
+      border-left: 1px solid #1e293b;
+      overflow: hidden;
+    }
+    #mg-macro-panel.mg-comms-mode {
+      width: min(1820px, calc(100vw - 1rem)) !important;
+      height: calc(100vh - 2rem) !important;
+      max-height: calc(100vh - 2rem) !important;
+    }
+    #mg-macro-panel.mg-comms-mode.open {
+      transform: translate(-50%, calc(-50% + 0.35rem)) scale(1) !important;
+    }
+    #mg-macro-panel.mg-comms-mode .mg-mac-header { display: none !important; }
+    #mg-macro-panel.mg-comms-mode #mg-comms-chat-slot { display: flex; flex-direction: column; }
+    #mg-macro-panel.mg-comms-mode #mg-macro-detail {
+      flex: 1;
+      min-width: 360px;
+      max-width: 580px;
+      border-right: 1px solid #1e293b;
+    }
+    #mg-macro-panel.mg-comms-mode #mg-macro-sidebar { width: 320px; }
+
+    .od2-chat-panel.mg-comms-embedded {
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      position: relative !important;
+      inset: auto !important;
+      left: auto !important;
+      top: auto !important;
+      right: auto !important;
+      bottom: auto !important;
+      width: 100% !important;
+      height: 100% !important;
+      max-width: none !important;
+      max-height: none !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      box-shadow: none !important;
+      transform: none !important;
+      display: flex !important;
+      flex-direction: column !important;
+      z-index: auto !important;
+    }
+    .od2-chat-panel.mg-comms-embedded .od2-comms-thread { flex: 1; min-height: 0; overflow-y: auto; }
+    .od2-chat-panel.mg-comms-embedded .od2-comms-composer {
+      flex-shrink: 0;
+      display: flex !important;
+      align-items: flex-end;
+      gap: 12px;
+      padding: 14px 16px 18px !important;
+      box-sizing: border-box;
+      border-top: 1px solid #e2e8f0;
+      background: #fff;
+    }
+    .od2-chat-panel.mg-comms-embedded .od2-comms-closed-notice {
+      flex-shrink: 0;
+      padding: 12px 16px 18px !important;
+      box-sizing: border-box;
+    }
+    .od2-chat-panel.mg-comms-embedded #od2CommsInput {
+      flex: 1;
+      min-height: 120px !important;
+      max-height: 600px !important;
+      resize: none !important;
+      line-height: 1.5 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+      overflow-y: hidden;
+    }
+    .od2-chat-panel.mg-comms-embedded #od2CommsSendBtn {
+      flex-shrink: 0;
+      margin-bottom: 2px;
+    }
   `;
   document.head.appendChild(style);
 
-  // Launcher pill
   const tab = document.createElement("button");
   tab.id = "mg-macro-tab";
   tab.type = "button";
@@ -4763,6 +4691,10 @@ function injectMacroModal() {
   `;
   document.body.appendChild(tab);
 
+  const backdrop = document.createElement("div");
+  backdrop.id = "mg-macro-backdrop";
+  backdrop.setAttribute("aria-hidden", "true");
+
   const panel = document.createElement("div");
   panel.id = "mg-macro-panel";
   panel.setAttribute("role", "dialog");
@@ -4773,27 +4705,394 @@ function injectMacroModal() {
       <div class="mg-mac-logo">✉️</div>
       <div class="mg-mac-titles">
         <div class="mg-mac-title">Patient Email Macros</div>
-        <div class="mg-mac-subtitle">Pre-written responses • Click to copy</div>
+        <div class="mg-mac-subtitle">Search by category • Edit • Copy or insert into chat</div>
       </div>
-      <button id="mg-macro-close" aria-label="Close">✕</button>
+      <button id="mg-macro-close" type="button" aria-label="Close">✕</button>
     </div>
-    <div id="mg-macro-cat-tabs"></div>
-    <div id="mg-macro-search-wrap">
-      <input id="mg-macro-search" type="text" placeholder="🔍  Search macros…" />
+    <div class="mg-mac-body">
+      <aside id="mg-macro-sidebar">
+        <div id="mg-macro-search-wrap">
+          <input id="mg-macro-search" type="search" placeholder="Search macros…" autocomplete="off" />
+        </div>
+        <nav id="mg-macro-cat-nav" aria-label="Macro categories"></nav>
+        <div id="mg-macro-list" role="listbox" aria-label="Macros"></div>
+      </aside>
+      <section id="mg-macro-detail">
+        <div id="mg-macro-detail-empty">Select a macro or choose Custom message to write your own email.</div>
+        <div id="mg-macro-detail-content">
+          <div id="mg-macro-custom-tabs" hidden>
+            <button type="button" class="mg-custom-tab active" data-mode="write">✏️ Write</button>
+            <button type="button" class="mg-custom-tab" data-mode="ai">✨ AI Assist</button>
+          </div>
+          <div id="mg-macro-write-pane">
+            <div id="mg-macro-detail-head">
+              <div id="mg-macro-detail-title-row">
+                <div id="mg-macro-detail-name"></div>
+                <span id="mg-macro-detail-tag"></span>
+              </div>
+              <div id="mg-macro-detail-desc"></div>
+            </div>
+            <textarea id="mg-macro-detail-preview" spellcheck="true" aria-label="Macro body — editable"></textarea>
+            <div id="mg-macro-detail-actions">
+              <button type="button" class="mg-mac-btn" id="mg-macro-copy-btn">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
+                <span id="mg-macro-copy-label">Copy</span>
+              </button>
+              <button type="button" class="mg-mac-btn chat-btn" id="mg-macro-insert-btn">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                Insert into chat
+              </button>
+            </div>
+          </div>
+          <div id="mg-macro-ai-pane" hidden>
+            <div id="mg-macro-ai-intro">Describe the scenario — AI will draft a patient message for you to review.</div>
+            <label for="mg-macro-ai-prompt">Your scenario</label>
+            <textarea id="mg-macro-ai-prompt" rows="4" placeholder="e.g. Patient has gallstones on SCR — ask if they had cholecystectomy and when…"></textarea>
+            <div class="mg-macro-ai-actions">
+              <button type="button" class="mg-mac-btn ai-btn" id="mg-macro-ai-generate">✨ Generate with AI</button>
+              <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-settings" title="Open extension Settings">Settings</button>
+              <span id="mg-macro-ai-status">Paste your OpenAI key in Settings → Save</span>
+            </div>
+            <label for="mg-macro-ai-result" id="mg-macro-ai-result-label" hidden>Generated message</label>
+            <textarea id="mg-macro-ai-result" rows="10" readonly spellcheck="true" aria-label="AI generated message" hidden></textarea>
+            <div id="mg-macro-ai-result-actions" hidden>
+              <button type="button" class="mg-mac-btn" id="mg-macro-ai-use-editor">Use in editor</button>
+              <button type="button" class="mg-mac-btn chat-btn" id="mg-macro-ai-insert-chat">Insert into chat</button>
+              <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-copy-result">Copy</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="mg-comms-chat-slot" aria-label="Patient chat"></section>
     </div>
-    <div id="mg-macro-content"></div>
   `;
+  document.body.appendChild(backdrop);
   document.body.appendChild(panel);
 
-  const catTabsEl = panel.querySelector("#mg-macro-cat-tabs");
-  const contentEl = panel.querySelector("#mg-macro-content");
-  const searchEl  = panel.querySelector("#mg-macro-search");
-  const closeBtn  = panel.querySelector("#mg-macro-close");
+  const catNavEl = panel.querySelector("#mg-macro-cat-nav");
+  const listEl = panel.querySelector("#mg-macro-list");
+  const searchEl = panel.querySelector("#mg-macro-search");
+  const closeBtn = panel.querySelector("#mg-macro-close");
+  const detailEmpty = panel.querySelector("#mg-macro-detail-empty");
+  const detailContent = panel.querySelector("#mg-macro-detail-content");
+  const detailHead = panel.querySelector("#mg-macro-detail-head");
+  const detailName = panel.querySelector("#mg-macro-detail-name");
+  const detailDesc = panel.querySelector("#mg-macro-detail-desc");
+  const detailTag = panel.querySelector("#mg-macro-detail-tag");
+  const detailPreview = panel.querySelector("#mg-macro-detail-preview");
+  const copyBtn = panel.querySelector("#mg-macro-copy-btn");
+  const copyLabel = panel.querySelector("#mg-macro-copy-label");
+  const insertBtn = panel.querySelector("#mg-macro-insert-btn");
+  const customTabs = panel.querySelector("#mg-macro-custom-tabs");
+  const writePane = panel.querySelector("#mg-macro-write-pane");
+  const aiPane = panel.querySelector("#mg-macro-ai-pane");
+  const aiPrompt = panel.querySelector("#mg-macro-ai-prompt");
+  const aiResult = panel.querySelector("#mg-macro-ai-result");
+  const aiResultLabel = panel.querySelector("#mg-macro-ai-result-label");
+  const aiResultActions = panel.querySelector("#mg-macro-ai-result-actions");
+  const aiGenerateBtn = panel.querySelector("#mg-macro-ai-generate");
+  const aiSettingsBtn = panel.querySelector("#mg-macro-ai-settings");
+  const aiUseEditorBtn = panel.querySelector("#mg-macro-ai-use-editor");
+  const aiInsertChatBtn = panel.querySelector("#mg-macro-ai-insert-chat");
+  const aiCopyResultBtn = panel.querySelector("#mg-macro-ai-copy-result");
+  const aiStatus = panel.querySelector("#mg-macro-ai-status");
+  let aiGenerating = false;
+  let customDetailMode = "write";
+
+  async function refreshAiStatusHint() {
+    if (!aiStatus || selectedKey !== CUSTOM_MACRO_KEY || customDetailMode !== "ai") return;
+    const { openaiKey } = await getAiSettings();
+    if (openaiKey) {
+      setAiStatus("OpenAI key configured — press Enter or click Generate.");
+    } else {
+      setAiStatus("Add your OpenAI API key in Settings → Save.", "error");
+    }
+  }
 
   let activeCatId = "all";
+  let selectedKey = null;
   let categories = [];
+  let commsMode = false;
+  let chatOriginalParent = null;
+  const CUSTOM_MACRO_KEY = "__custom__";
+  const chatSlot = panel.querySelector("#mg-comms-chat-slot");
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  function getCustomTemplateBody() {
+    return "Dear {patient_name},\n\n\n\nKind regards,\nEveryDayMeds Clinical Team";
+  }
+
+  function getCustomEntry() {
+    return {
+      cat: { id: "custom", label: "Custom", icon: "✏️" },
+      macro: {
+        name: "Custom message",
+        desc: "Write your own email from scratch",
+        tag: "Custom",
+        body: getCustomTemplateBody(),
+      },
+      key: CUSTOM_MACRO_KEY,
+    };
+  }
+
+  function customMatchesSearch(q) {
+    if (!q) return true;
+    const hay = "custom message write your own email from scratch blank";
+    return hay.includes(q);
+  }
+
+  function appendCustomListItem(q) {
+    if (!customMatchesSearch(q)) return false;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mg-mac-list-item custom-item" + (selectedKey === CUSTOM_MACRO_KEY ? " active" : "");
+    btn.setAttribute("role", "option");
+    btn.innerHTML = `
+      <div class="mg-mac-list-item-name">✏️ Custom message</div>
+      <div class="mg-mac-list-item-meta">Write your own email from scratch</div>
+    `;
+    btn.addEventListener("click", () => {
+      selectedKey = CUSTOM_MACRO_KEY;
+      renderList();
+      renderDetail();
+      detailPreview.focus();
+    });
+    listEl.appendChild(btn);
+    return true;
+  }
+
+  function macroKey(catId, m) {
+    return `${catId}::${m.name}`;
+  }
+
+  function getPatientFullName() {
+    try {
+      const sub = document.querySelector(".chat-panel-sub");
+      if (sub && sub.textContent) return String(sub.textContent).trim();
+    } catch (_) {}
+    try {
+      const d = lastScannedData || {};
+      if (d.patientName) return String(d.patientName).trim();
+    } catch (_) {}
+    return "";
+  }
+
+  function getRecentChatSnippet(maxMsgs = 4) {
+    try {
+      const thread = document.getElementById("od2CommsThread");
+      if (!thread) return "";
+      return [...thread.querySelectorAll(".od2-comms-bubble.from-patient")]
+        .slice(-maxMsgs)
+        .map(b => String(b.textContent || "").trim())
+        .filter(Boolean)
+        .join("\n---\n");
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function buildEmailAiContext() {
+    const d = lastScannedData || {};
+    const lines = [];
+    const fullName = getPatientFullName();
+    const firstName = getPatientName();
+    if (fullName) lines.push(`Patient full name: ${fullName}`);
+    else if (firstName && firstName !== "there") lines.push(`Patient first name: ${firstName}`);
+    if (d.orderNo) lines.push(`Current order #: ${d.orderNo}`);
+    if (d.orderDate) lines.push(`Current order date: ${d.orderDate}`);
+    if (d.medication) lines.push(`Medication ordered: ${d.medication}${d.dose ? ` ${d.dose}` : ""}`);
+    if (d.qty) lines.push(`Current order quantity (pens): ${d.qty}`);
+    if (d.bmi != null) lines.push(`BMI: ${d.bmi}`);
+    if (d.age != null) lines.push(`Age: ${d.age}`);
+    if (d.fulfilledOrderNo) lines.push(`Last fulfilled order with us #: ${d.fulfilledOrderNo}`);
+    if (d.fulfilledOrderDate) lines.push(`Last order date with us: ${d.fulfilledOrderDate}`);
+    if (d.fulfilledDate) lines.push(`Last order fulfilled/dispatched: ${d.fulfilledDate}`);
+    if (d.fulfilledQty) {
+      const supplyW = (d.fulfilledQty || 1) * 4;
+      lines.push(`Last order supply: ${d.fulfilledQty} pen(s) ≈ ${supplyW} weeks`);
+    }
+    if (d.expectedLastDoseRange) {
+      lines.push(`Expected last injection window from last order: ${d.expectedLastDoseRange}`);
+    }
+    if (d.declaredLastInjection) {
+      lines.push(`Patient declared last injection (consultation): ${d.declaredLastInjection}`);
+    }
+    if (d.anotherProviderAnswer) {
+      lines.push(`Another provider during gap (consultation): ${d.anotherProviderAnswer}`);
+    }
+    if (d.supplyCheckRequired && d.treatmentGapWeeks != null) {
+      lines.push(`Supply check: declared injection is ~${d.treatmentGapWeeks} week(s) beyond expected supply from last order`);
+    }
+    const lastOrderDate = d.fulfilledOrderDate ? parseMedDate(d.fulfilledOrderDate) : null;
+    if (lastOrderDate) {
+      const daysSince = Math.round((startOfDay(new Date()) - startOfDay(lastOrderDate)) / (1000 * 60 * 60 * 24));
+      const weeksSince = Math.floor(daysSince / 7);
+      lines.push(`Time since last order with us: ~${weeksSince} weeks (${daysSince} days)`);
+      if (weeksSince >= 8) {
+        lines.push(`Note: significant gap since last EverydayMeds order — if patient claims a recent injection, one pen order would not cover that period; consider asking about another provider/source.`);
+      }
+    }
+    if (Array.isArray(d.flags) && d.flags.length) {
+      lines.push(`Clinical flags on order: ${d.flags.map(f => f.text).join("; ")}`);
+    }
+    if (Array.isArray(d.patientTags) && d.patientTags.length) {
+      lines.push(`Patient tags: ${d.patientTags.join(", ")}`);
+    }
+    const chatSnippet = getRecentChatSnippet();
+    if (chatSnippet) lines.push(`Recent patient chat:\n${chatSnippet}`);
+    return lines.join("\n");
+  }
+
+  function getAiSettings() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.sync.get(["server_url", "openai_key"], (r) => {
+          resolve({
+            serverUrl: (r && r.server_url) ? String(r.server_url).replace(/\/$/, "") : "",
+            openaiKey: (r && r.openai_key) ? String(r.openai_key) : "",
+          });
+        });
+      } catch (_) {
+        resolve({ serverUrl: "", openaiKey: "" });
+      }
+    });
+  }
+
+  async function generateEmailWithAI(scenario) {
+    const prompt = (scenario || "").trim();
+    if (!prompt) throw new Error("Describe the scenario first.");
+
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage({
+          type: "GENERATE_PATIENT_EMAIL",
+          scenario: prompt,
+          context: buildEmailAiContext(),
+        }, (resp) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || "Extension error"));
+            return;
+          }
+          if (resp?.success && resp.text) {
+            resolve(stripEmailSubject(resp.text));
+            return;
+          }
+          reject(new Error(resp?.error || "Generation failed."));
+        });
+      } catch (e) {
+        reject(new Error(e?.message || "Could not reach extension background."));
+      }
+    });
+  }
+
+  function setCustomDetailMode(mode) {
+    customDetailMode = mode === "ai" ? "ai" : "write";
+    if (customTabs) {
+      customTabs.querySelectorAll(".mg-custom-tab").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.mode === customDetailMode);
+      });
+    }
+    if (writePane) writePane.hidden = customDetailMode !== "write";
+    if (aiPane) aiPane.hidden = customDetailMode !== "ai";
+    if (customDetailMode === "ai") {
+      refreshAiStatusHint();
+      if (aiPrompt) aiPrompt.focus();
+    } else if (detailPreview) {
+      detailPreview.focus();
+    }
+  }
+
+  function showAiResult(text) {
+    if (aiResult) {
+      aiResult.value = text;
+      aiResult.hidden = false;
+    }
+    if (aiResultLabel) aiResultLabel.hidden = false;
+    if (aiResultActions) aiResultActions.hidden = false;
+  }
+
+  function hideAiResult() {
+    if (aiResult) {
+      aiResult.value = "";
+      aiResult.hidden = true;
+    }
+    if (aiResultLabel) aiResultLabel.hidden = true;
+    if (aiResultActions) aiResultActions.hidden = true;
+  }
+
+  function setAiStatus(text, kind) {
+    if (!aiStatus) return;
+    aiStatus.textContent = text;
+    aiStatus.classList.remove("error", "success");
+    if (kind) aiStatus.classList.add(kind);
+  }
+
+  async function runAiGenerate() {
+    if (aiGenerating || !aiPrompt) return;
+    const scenario = aiPrompt.value.trim();
+    if (!scenario) {
+      setAiStatus("Describe the scenario first.", "error");
+      aiPrompt.focus();
+      return;
+    }
+    aiGenerating = true;
+    if (aiGenerateBtn) aiGenerateBtn.disabled = true;
+    hideAiResult();
+    setAiStatus("Generating draft…");
+    try {
+      const draft = await generateEmailWithAI(scenario);
+      showAiResult(draft);
+      setAiStatus("Draft ready — copy, insert into chat, or use in editor.", "success");
+    } catch (e) {
+      setAiStatus(e?.message || "Generation failed.", "error");
+    } finally {
+      aiGenerating = false;
+      if (aiGenerateBtn) aiGenerateBtn.disabled = false;
+    }
+  }
+
+  function useAiDraftInEditor() {
+    if (!aiResult || !detailPreview) return;
+    const draft = String(aiResult.value || "").trim();
+    if (!draft) return;
+    detailPreview.value = draft;
+    detailPreview.dataset.macroKey = CUSTOM_MACRO_KEY;
+    setCustomDetailMode("write");
+    detailPreview.focus();
+    try { detailPreview.setSelectionRange(detailPreview.value.length, detailPreview.value.length); } catch (_) {}
+  }
+
+  async function insertAiDraftIntoChat() {
+    if (!aiResult) return;
+    const text = String(aiResult.value || "").trim();
+    if (!text) return;
+    if (!commsMode) {
+      await openCommsModal();
+    }
+    let input = null;
+    for (let i = 0; i < 24; i++) {
+      await sleep(80);
+      input = document.getElementById("od2CommsInput");
+      if (input && input.offsetParent !== null) break;
+    }
+    if (!input) return;
+    const closedNotice = document.getElementById("od2CommsClosedNotice");
+    if (closedNotice && closedNotice.offsetParent !== null) {
+      const startBtn = document.getElementById("od2ChatToggleBtn");
+      if (startBtn && /start chat/i.test(startBtn.textContent || "")) startBtn.click();
+      await sleep(200);
+    }
+    setFieldValue(input, text);
+    autoResizeTextarea(input);
+    input.focus();
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) {}
+  }
 
   function getPatientName() {
+    try {
+      const sub = document.querySelector(".chat-panel-sub");
+      if (sub && sub.textContent) return String(sub.textContent).trim().split(/\s+/)[0];
+    } catch (_) {}
     try {
       const pd = window.patientData || (typeof patientData !== "undefined" ? patientData : null);
       if (pd && typeof pd === "object" && pd.name) return String(pd.name).split(/\s+/)[0];
@@ -4801,9 +5100,15 @@ function injectMacroModal() {
     return "there";
   }
 
+  function stripEmailSubject(text) {
+    return String(text)
+      .replace(/^(\[[^\]]+\]\s*\n+)?Subject:\s*[^\n]+\n+/i, "")
+      .trim();
+  }
+
   function fillPlaceholders(text) {
     const name = getPatientName();
-    return String(text)
+    return stripEmailSubject(String(text))
       .replace(/\{patient_name\}/gi, name)
       .replace(/\[Patient Name\]/gi, name)
       .replace(/<<\s*Patient Name\s*>>/gi, name);
@@ -4821,56 +5126,348 @@ function injectMacroModal() {
     return safe.replace(new RegExp(safeQ, "gi"), m => `<span class="mg-mac-hl">${m}</span>`);
   }
 
-  function renderCatTabs() {
-    catTabsEl.innerHTML = "";
-    const all = document.createElement("button");
-    all.type = "button";
-    all.className = "mg-mac-cat-tab" + (activeCatId === "all" ? " active" : "");
-    all.innerHTML = `<span>📚</span><span>All</span>`;
-    all.addEventListener("click", () => { activeCatId = "all"; renderCatTabs(); renderContent(); });
-    catTabsEl.appendChild(all);
-
-    categories.forEach(c => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "mg-mac-cat-tab" + (c.id === activeCatId ? " active" : "");
-      b.innerHTML = `<span>${esc(c.icon || "•")}</span><span>${esc(c.label)}</span>`;
-      b.addEventListener("click", () => { activeCatId = c.id; renderCatTabs(); renderContent(); });
-      catTabsEl.appendChild(b);
-    });
-  }
-
   function macroMatches(m, q) {
     if (!q) return true;
     const hay = `${m.name} ${m.desc || ""} ${m.tag || ""} ${m.body}`.toLowerCase();
     return hay.includes(q);
   }
 
-  function renderMacroCard(m, q) {
-    const card = document.createElement("div");
-    card.className = "mg-mac-card";
-    card.innerHTML = `
-      <div class="mg-mac-card-head">
-        <div class="mg-mac-card-name">${highlight(m.name, q)}</div>
-        ${m.tag ? `<span class="mg-mac-tag">${esc(m.tag)}</span>` : ""}
-      </div>
-      ${m.desc ? `<div class="mg-mac-desc">${highlight(m.desc, q)}</div>` : ""}
-      <div class="mg-mac-actions">
-        <button type="button" class="mg-mac-btn mg-mac-copy">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
-          <span class="mg-mac-copy-label">Copy</span>
-        </button>
-        <button type="button" class="mg-mac-btn secondary mg-mac-toggle">Preview</button>
-      </div>
-      <div class="mg-mac-preview"></div>
-    `;
-    const copyBtn   = card.querySelector(".mg-mac-copy");
-    const copyLabel = card.querySelector(".mg-mac-copy-label");
-    const toggleBtn = card.querySelector(".mg-mac-toggle");
-    const preview   = card.querySelector(".mg-mac-preview");
+  function getFilteredMacros() {
+    const q = (searchEl.value || "").trim().toLowerCase();
+    const out = [];
+    categories.forEach(c => {
+      if (activeCatId !== "all" && c.id !== activeCatId) return;
+      (c.macros || []).forEach(m => {
+        if (macroMatches(m, q)) out.push({ cat: c, macro: m, key: macroKey(c.id, m) });
+      });
+    });
+    return out;
+  }
 
-    copyBtn.addEventListener("click", async () => {
-      const text = fillPlaceholders(m.body);
+  function getSelectedEntry() {
+    if (!selectedKey) return null;
+    if (selectedKey === CUSTOM_MACRO_KEY) return getCustomEntry();
+    return getFilteredMacros().find(e => e.key === selectedKey)
+      || categories.flatMap(c => (c.macros || []).map(m => ({ cat: c, macro: m, key: macroKey(c.id, m) }))).find(e => e.key === selectedKey)
+      || null;
+  }
+
+  function getDetailText() {
+    return detailPreview ? String(detailPreview.value || "") : "";
+  }
+
+  function renderDetail() {
+    const entry = getSelectedEntry();
+    if (!entry) {
+      detailEmpty.style.display = "grid";
+      detailContent.classList.remove("visible");
+      if (detailPreview) detailPreview.dataset.macroKey = "";
+      return;
+    }
+    const { macro: m } = entry;
+    const q = (searchEl.value || "").trim();
+    detailEmpty.style.display = "none";
+    detailContent.classList.add("visible");
+    detailName.innerHTML = highlight(m.name, q);
+    detailDesc.innerHTML = m.desc ? highlight(m.desc, q) : "";
+    detailDesc.style.display = m.desc ? "block" : "none";
+    if (m.tag) {
+      detailTag.textContent = m.tag;
+      detailTag.style.display = "inline-block";
+    } else {
+      detailTag.style.display = "none";
+    }
+    if (detailPreview.dataset.macroKey !== selectedKey) {
+      detailPreview.value = fillPlaceholders(m.body);
+      detailPreview.dataset.macroKey = selectedKey;
+      if (selectedKey === CUSTOM_MACRO_KEY) {
+        customDetailMode = "write";
+        hideAiResult();
+      }
+    }
+    const isCustom = selectedKey === CUSTOM_MACRO_KEY;
+    if (detailHead) detailHead.classList.toggle("compact", isCustom);
+    if (customTabs) customTabs.hidden = !isCustom;
+    if (isCustom) {
+      if (customDetailMode !== "write" && customDetailMode !== "ai") customDetailMode = "write";
+      setCustomDetailMode(customDetailMode);
+      refreshAiStatusHint();
+    } else {
+      customDetailMode = "write";
+      if (writePane) writePane.hidden = false;
+      if (aiPane) aiPane.hidden = true;
+    }
+    copyBtn.classList.remove("copied");
+    copyLabel.textContent = "Copy";
+  }
+
+  function renderCatNav() {
+    const q = (searchEl.value || "").trim().toLowerCase();
+    catNavEl.innerHTML = "";
+    const counts = new Map();
+    let allCount = 0;
+    categories.forEach(c => {
+      const n = (c.macros || []).filter(m => macroMatches(m, q)).length;
+      counts.set(c.id, n);
+      allCount += n;
+    });
+
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "mg-mac-cat-item" + (activeCatId === "all" ? " active" : "");
+    allBtn.innerHTML = `<span>📚</span><span>All categories</span><span class="mg-mac-cat-count">${allCount}</span>`;
+    allBtn.addEventListener("click", () => { activeCatId = "all"; renderCatNav(); renderList(); });
+    catNavEl.appendChild(allBtn);
+
+    categories.forEach(c => {
+      const n = counts.get(c.id) || 0;
+      if (q && n === 0) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mg-mac-cat-item" + (c.id === activeCatId ? " active" : "");
+      b.innerHTML = `<span>${esc(c.icon || "•")}</span><span>${esc(c.label)}</span><span class="mg-mac-cat-count">${n}</span>`;
+      b.addEventListener("click", () => { activeCatId = c.id; renderCatNav(); renderList(); });
+      catNavEl.appendChild(b);
+    });
+  }
+
+  function renderList() {
+    const qRaw = (searchEl.value || "").trim();
+    const q = qRaw.toLowerCase();
+    const entries = getFilteredMacros();
+    listEl.innerHTML = "";
+
+    const customShown = appendCustomListItem(q);
+
+    if (!entries.length && !customShown) {
+      const empty = document.createElement("div");
+      empty.className = "mg-mac-empty";
+      empty.textContent = q ? `No macros match "${qRaw}".` : "No macros in this category.";
+      listEl.appendChild(empty);
+      selectedKey = null;
+      renderDetail();
+      return;
+    }
+
+    const customValid = customShown && customMatchesSearch(q);
+    const entryKeys = entries.map(e => e.key);
+    if (!selectedKey || (selectedKey !== CUSTOM_MACRO_KEY && !entryKeys.includes(selectedKey))) {
+      selectedKey = customValid ? CUSTOM_MACRO_KEY : entryKeys[0];
+    }
+
+    let lastCat = null;
+    entries.forEach(({ cat, macro: m, key }) => {
+      if (activeCatId === "all" && lastCat !== cat.id) {
+        lastCat = cat.id;
+        const g = document.createElement("div");
+        g.className = "mg-mac-list-group";
+        g.textContent = `${cat.icon || ""} ${cat.label}`.trim();
+        listEl.appendChild(g);
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mg-mac-list-item" + (key === selectedKey ? " active" : "");
+      btn.setAttribute("role", "option");
+      btn.innerHTML = `
+        <div class="mg-mac-list-item-name">${highlight(m.name, q)}</div>
+        ${m.desc ? `<div class="mg-mac-list-item-meta">${highlight(m.desc, q)}</div>` : ""}
+      `;
+      btn.addEventListener("click", () => {
+        selectedKey = key;
+        renderList();
+        renderDetail();
+      });
+      listEl.appendChild(btn);
+    });
+    renderDetail();
+  }
+
+  async function copySelected() {
+    const entry = getSelectedEntry();
+    if (!entry) return;
+    const text = getDetailText() || fillPlaceholders(entry.macro.body || "");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (_) {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (_) {}
+      document.body.removeChild(ta);
+    }
+    copyBtn.classList.add("copied");
+    copyLabel.textContent = "Copied ✓";
+    setTimeout(() => {
+      copyBtn.classList.remove("copied");
+      copyLabel.textContent = "Copy";
+    }, 1600);
+  }
+
+  async function insertIntoChat() {
+    const entry = getSelectedEntry();
+    if (!entry) return;
+    const text = getDetailText() || fillPlaceholders(entry.macro.body || "");
+    if (!commsMode) {
+      await openCommsModal();
+    }
+    let input = null;
+    for (let i = 0; i < 24; i++) {
+      await sleep(80);
+      input = document.getElementById("od2CommsInput");
+      if (input && input.offsetParent !== null) break;
+    }
+    if (!input) return;
+    const closedNotice = document.getElementById("od2CommsClosedNotice");
+    if (closedNotice && closedNotice.offsetParent !== null) {
+      const startBtn = document.getElementById("od2ChatToggleBtn");
+      if (startBtn && /start chat/i.test(startBtn.textContent || "")) startBtn.click();
+      await sleep(200);
+    }
+    setFieldValue(input, text);
+    autoResizeTextarea(input);
+    input.focus();
+    try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) {}
+  }
+
+  async function ensureNativeChatOpen() {
+    const chatPanel = document.getElementById("od2ChatPanel");
+    const fab = document.getElementById("od2ChatFab");
+    if (!chatPanel || !fab) return false;
+    if (chatPanel.classList.contains("is-open")) return true;
+    window.__mgOpeningCommsInternal = true;
+    try { fab.click(); } finally { window.__mgOpeningCommsInternal = false; }
+    for (let i = 0; i < 40; i++) {
+      await sleep(50);
+      if (chatPanel.classList.contains("is-open")) return true;
+    }
+    return false;
+  }
+
+  function bindEmbeddedChatClose() {
+    const nativeClose = document.getElementById("od2ChatPanelClose");
+    if (!nativeClose || nativeClose.dataset.mgBound) return;
+    nativeClose.dataset.mgBound = "1";
+    nativeClose.addEventListener("click", (e) => {
+      if (!commsMode) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closePanel();
+    }, true);
+  }
+
+  function embedNativeChat() {
+    const chatPanel = document.getElementById("od2ChatPanel");
+    if (!chatPanel || !chatSlot) return false;
+    if (!chatOriginalParent) chatOriginalParent = chatPanel.parentElement;
+    chatPanel.classList.add("mg-comms-embedded");
+    chatSlot.appendChild(chatPanel);
+    panel.classList.add("mg-comms-mode");
+    commsMode = true;
+    bindEmbeddedChatClose();
+    bindCommsInputAutoResize();
+    return true;
+  }
+
+  function unembedNativeChat() {
+    const chatPanel = document.getElementById("od2ChatPanel");
+    if (!chatPanel) return;
+    chatPanel.classList.remove("mg-comms-embedded");
+    if (chatOriginalParent && chatOriginalParent.isConnected) {
+      chatOriginalParent.appendChild(chatPanel);
+    } else {
+      document.body.appendChild(chatPanel);
+    }
+    panel.classList.remove("mg-comms-mode");
+    commsMode = false;
+  }
+
+  async function openCommsModal() {
+    if (panel.classList.contains("open") && commsMode) {
+      document.getElementById("od2CommsInput")?.focus();
+      return;
+    }
+    const ok = await ensureNativeChatOpen();
+    if (!ok) return;
+    selectedKey = CUSTOM_MACRO_KEY;
+    customDetailMode = "write";
+    hideAiResult();
+    embedNativeChat();
+    openPanel();
+    renderList();
+    renderDetail();
+    setTimeout(() => detailPreview.focus(), 120);
+  }
+
+  async function openMacrosOnlyModal() {
+    if (panel.classList.contains("open") && commsMode) {
+      closePanel();
+      await sleep(220);
+    }
+    openPanel();
+  }
+
+  async function refreshMacroData() {
+    categories = await getMacroCategoriesForPopout();
+    if (activeCatId !== "all" && !categories.some(c => c.id === activeCatId)) {
+      activeCatId = "all";
+    }
+    renderCatNav();
+    renderList();
+  }
+
+  function openPanel() {
+    backdrop.classList.add("open");
+    backdrop.setAttribute("aria-hidden", "false");
+    panel.classList.add("open");
+    panel.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    setTimeout(() => searchEl.focus(), 80);
+  }
+
+  function closePanel() {
+    if (commsMode) {
+      unembedNativeChat();
+      const nativeClose = document.getElementById("od2ChatPanelClose");
+      if (nativeClose) nativeClose.click();
+    }
+    backdrop.classList.remove("open");
+    backdrop.setAttribute("aria-hidden", "true");
+    panel.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+    document.body.style.overflow = "";
+  }
+
+  window.__mgOpenMacroModal = openMacrosOnlyModal;
+  window.__mgOpenCommsModal = openCommsModal;
+  window.__mgCloseMacroModal = closePanel;
+
+  tab.addEventListener("click", () => {
+    panel.classList.contains("open") ? closePanel() : openMacrosOnlyModal();
+  });
+  backdrop.addEventListener("click", closePanel);
+  closeBtn.addEventListener("click", closePanel);
+  copyBtn.addEventListener("click", copySelected);
+  insertBtn.addEventListener("click", insertIntoChat);
+  if (aiGenerateBtn) aiGenerateBtn.addEventListener("click", runAiGenerate);
+  if (aiSettingsBtn) {
+    aiSettingsBtn.addEventListener("click", () => {
+      try {
+        if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
+        else window.open(chrome.runtime.getURL("options.html"));
+      } catch (_) {}
+    });
+  }
+  if (customTabs) {
+    customTabs.querySelectorAll(".mg-custom-tab").forEach((btn) => {
+      btn.addEventListener("click", () => setCustomDetailMode(btn.dataset.mode));
+    });
+  }
+  if (aiUseEditorBtn) aiUseEditorBtn.addEventListener("click", useAiDraftInEditor);
+  if (aiInsertChatBtn) aiInsertChatBtn.addEventListener("click", insertAiDraftIntoChat);
+  if (aiCopyResultBtn) {
+    aiCopyResultBtn.addEventListener("click", async () => {
+      const text = String(aiResult?.value || "").trim();
+      if (!text) return;
       try {
         await navigator.clipboard.writeText(text);
       } catch (_) {
@@ -4880,100 +5477,28 @@ function injectMacroModal() {
         try { document.execCommand("copy"); } catch (_) {}
         document.body.removeChild(ta);
       }
-      copyBtn.classList.add("copied");
-      copyLabel.textContent = "Copied ✓";
+      aiCopyResultBtn.classList.add("copied");
+      const prev = aiCopyResultBtn.textContent;
+      aiCopyResultBtn.textContent = "Copied ✓";
       setTimeout(() => {
-        copyBtn.classList.remove("copied");
-        copyLabel.textContent = "Copy";
+        aiCopyResultBtn.classList.remove("copied");
+        aiCopyResultBtn.textContent = prev;
       }, 1600);
     });
-
-    toggleBtn.addEventListener("click", () => {
-      if (preview.classList.contains("open")) {
-        preview.classList.remove("open");
-        toggleBtn.textContent = "Preview";
-      } else {
-        preview.textContent = fillPlaceholders(m.body);
-        preview.classList.add("open");
-        toggleBtn.textContent = "Hide";
-      }
+  }
+  if (aiPrompt) {
+    aiPrompt.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+      e.preventDefault();
+      runAiGenerate();
     });
-
-    return card;
   }
-
-  function renderContent() {
-    const qRaw = (searchEl.value || "").trim();
-    const q = qRaw.toLowerCase();
-    contentEl.innerHTML = "";
-
-    let cats = categories;
-    if (activeCatId !== "all") cats = cats.filter(c => c.id === activeCatId);
-
-    let total = 0;
-    cats.forEach((c, ci) => {
-      const matches = (c.macros || []).filter(m => macroMatches(m, q));
-      if (!matches.length) return;
-      total += matches.length;
-      if (activeCatId === "all") {
-        const h = document.createElement("div");
-        h.className = "mg-mac-cat-header" + (ci === 0 ? " first" : "");
-        h.textContent = `${c.icon || ""} ${c.label} (${matches.length})`;
-        contentEl.appendChild(h);
-      }
-      matches.forEach(m => contentEl.appendChild(renderMacroCard(m, q)));
-    });
-
-    if (!total) {
-      const empty = document.createElement("div");
-      empty.className = "mg-mac-empty";
-      empty.textContent = q ? `No macros match "${qRaw}".` : "No macros in this category yet.";
-      contentEl.appendChild(empty);
-    }
-    contentEl.scrollTop = 0;
-  }
-
-  async function refreshMacroData() {
-    categories = await getMacroCategoriesForPopout();
-    if (activeCatId !== "all" && !categories.some(c => c.id === activeCatId)) {
-      activeCatId = "all";
-    }
-    renderCatTabs();
-    renderContent();
-  }
-
-  function openPanel() {
-    panel.classList.add("open");
-    panel.setAttribute("aria-hidden", "false");
-    setTimeout(() => searchEl.focus(), 100);
-  }
-  function closePanel() {
-    panel.classList.remove("open");
-    panel.setAttribute("aria-hidden", "true");
-    tab.focus();
-  }
-
-  tab.addEventListener("click", () => {
-    panel.classList.contains("open") ? closePanel() : openPanel();
-  });
-  closeBtn.addEventListener("click", closePanel);
-
-  const _outsideClickHandler = (e) => {
-    if (!panel.classList.contains("open")) return;
-    const path = (typeof e.composedPath === "function") ? e.composedPath() : [];
-    if (path.includes(panel) || path.includes(tab)) return;
-    if (!path.length && (panel.contains(e.target) || tab.contains(e.target))) return;
-    closePanel();
-  };
-  document.addEventListener("mousedown", _outsideClickHandler, true);
-  window.__mgMacroOutsideClick = _outsideClickHandler;
-
-  searchEl.addEventListener("input", () => renderContent());
+  searchEl.addEventListener("input", () => { renderCatNav(); renderList(); });
 
   const _keydownHandler = (e) => {
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "m") {
       e.preventDefault();
-      panel.classList.contains("open") ? closePanel() : openPanel();
+      panel.classList.contains("open") ? closePanel() : openMacrosOnlyModal();
     }
     if (e.key === "Escape" && panel.classList.contains("open")) closePanel();
   };
@@ -4988,18 +5513,43 @@ function injectMacroModal() {
         if (area === "local" && changes.email_macros && document.getElementById("mg-macro-panel")) {
           try { refreshMacroData(); } catch (_) {}
         }
+        if (area === "sync" && (changes.openai_key || changes.server_url)) {
+          try { refreshAiStatusHint(); } catch (_) {}
+        }
       });
       window.__mgMacroStorageListenerInstalled = true;
     } catch (_) {}
   }
 }
 
+function injectChatFabHijack() {
+  const fab = document.getElementById("od2ChatFab");
+  if (!fab || fab.dataset.mgHijacked) return;
+  fab.dataset.mgHijacked = "1";
+
+  const onFabActivate = (e) => {
+    if (window.__mgOpeningCommsInternal) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (typeof window.__mgOpenCommsModal === "function") window.__mgOpenCommsModal();
+    else injectMacroModal();
+  };
+
+  fab.addEventListener("click", onFabActivate, true);
+  fab.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") onFabActivate(e);
+  }, true);
+}
+
 function _mgEnsureMacro() {
   try {
     if (!document.body) return;
-    if (document.getElementById("mg-macro-tab") && document.getElementById("mg-macro-panel")) return;
-    injectMacroModal();
-    console.log("[MediGuard] Macros popout injected");
+    if (!document.getElementById("mg-macro-backdrop") || !document.getElementById("mg-macro-panel")) {
+      injectMacroModal();
+      console.log("[MediGuard] Macros modal injected");
+    }
+    injectChatFabHijack();
   } catch (e) {
     console.warn("[MediGuard] Macros inject failed:", e);
   }
@@ -5010,8 +5560,10 @@ window.addEventListener("load", _mgEnsureMacro);
 [300, 800, 1500, 3000, 6000].forEach(ms => setTimeout(_mgEnsureMacro, ms));
 try {
   const _mgMacObs = new MutationObserver(() => {
-    if (!document.getElementById("mg-macro-tab") || !document.getElementById("mg-macro-panel")) {
+    if (!document.getElementById("mg-macro-backdrop") || !document.getElementById("mg-macro-panel")) {
       _mgEnsureMacro();
+    } else {
+      injectChatFabHijack();
     }
   });
   const _mgMacStartObs = () => {

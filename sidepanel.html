@@ -193,30 +193,6 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
     .tag-blue { background: #eff6ff; color: #1e40af; border-color: #bfdbfe; }
     .tag-slate { background: var(--bg); color: var(--slate-light); border-color: var(--border); }
 
-    /* ── Eligibility Alert ── */
-    .elig-alert {
-      margin-bottom: 4px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1.5px solid;
-      display: flex;
-      align-items: flex-start;
-      gap: 9px;
-      animation: pulseAlert 2s ease infinite;
-    }
-    @keyframes pulseAlert {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); }
-      50% { box-shadow: 0 0 0 4px rgba(220,38,38,0.12); }
-    }
-    .elig-alert-red { background: var(--red-dim); border-color: var(--red-border); color: #7f1d1d; }
-    .elig-alert-yellow { background: var(--amber-dim); border-color: var(--amber-border); color: #78350f; animation: none; }
-    .elig-alert-icon { flex-shrink: 0; margin-top: 1px; }
-    .elig-alert-body { flex: 1; min-width: 0; }
-    .elig-alert-title { font-size: 12px; font-weight: 800; margin-bottom: 2px; }
-    .elig-alert-text { font-size: 11px; line-height: 1.5; }
-    .elig-alert-list { margin-top: 5px; padding-left: 14px; font-size: 10.5px; line-height: 1.55; }
-    .elig-alert-list li { margin: 1px 0; }
-
     /* ── Panel Tabs ── */
     .panel-tabs {
       display: flex; background: var(--white);
@@ -1019,8 +995,6 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       <button class="btn-scan" id="scan-btn">Scan Page</button>
     </div>
     <div id="wf-content" style="display:none; flex:1; padding:12px; flex-direction:column; gap:8px;">
-      <div id="supply-check-wrap" style="display:none;"></div>
-      <div id="elig-alert-wrap"></div>
       <div class="workflow-steps-section" id="workflow-steps-section">
         <div class="progress-wrap" id="progress-wrap-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="steps-list" title="Show / hide prescription steps">
           <div class="progress-top">
@@ -1310,6 +1284,7 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
 
   <div id="toast"></div>
 
+  <script src="email-macros-data.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

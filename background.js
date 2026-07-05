@@ -221,6 +221,139 @@ async function closeScrAndReturn(senderTabId) {
   return { success: true, activatedTabId: rxTabId || null, closedCount: idsToRemove.length };
 }
 
+function stripEmailSubject(text) {
+  return String(text)
+    .replace(/^(\[[^\]]+\]\s*\n+)?Subject:\s*[^\n]+\n+/i, "")
+    .trim();
+}
+
+function getAiSettingsFromStorage() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(["server_url", "openai_key"], (r) => {
+      resolve({
+        serverUrl: (r && r.server_url) ? String(r.server_url).replace(/\/$/, "") : "",
+        openaiKey: (r && r.openai_key) ? String(r.openai_key) : "",
+      });
+    });
+  });
+}
+
+async function callOpenAiEmail(messages, openaiKey) {
+  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openaiKey}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages,
+      max_tokens: 900,
+      temperature: 0.35,
+    }),
+  });
+  if (!r.ok) {
+    let msg = `OpenAI error (${r.status})`;
+    try {
+      const err = await r.json();
+      if (err?.error?.message) msg = err.error.message;
+    } catch (_) {}
+    throw new Error(msg);
+  }
+  const j = await r.json();
+  const text = j.choices?.[0]?.message?.content;
+  if (!text) throw new Error("OpenAI returned an empty response.");
+  return text;
+}
+
+async function callServerEmail(messages, serverUrl) {
+  const r = await fetch(`${serverUrl}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  if (!r.ok) throw new Error(`Server error (${r.status})`);
+  const j = await r.json();
+  const text = j.response || j.message || j.content;
+  if (!text) throw new Error("Server returned an empty response.");
+  return text;
+}
+
+async function generatePatientEmail(scenario, context) {
+  const prompt = (scenario || "").trim();
+  if (!prompt) throw new Error("Describe the scenario first.");
+
+  const { serverUrl, openaiKey } = await getAiSettingsFromStorage();
+  if (!openaiKey && !serverUrl) {
+    throw new Error("Add your OpenAI API key in extension Settings → Save, then try again.");
+  }
+
+  const sys = `You are an expert clinical message writer for EverydayMeds, a UK online GLP-1 weight loss pharmacy (Mounjaro, Wegovy, etc.).
+
+You write patient chat messages the way ChatGPT would for a skilled prescriber: you understand their INTENT from their scenario note, not random checklist items.
+
+PRIMARY RULE — FOLLOW THE PRESCRIBER'S SCENARIO:
+- The prescriber's scenario description is your main instruction. Address EXACTLY what they are asking about.
+- Do NOT invent unrelated topics (thyroid cancer, eating disorders, SCR conditions, etc.) unless the prescriber explicitly mentions them.
+- Do NOT dump generic consultation or contraindication questions into the message.
+- If the scenario mentions a treatment gap, last injection date, last order date, or another provider — that is the focus of the message.
+
+CLINICAL REASONING (when relevant to the scenario):
+- Each pen order typically covers ~4 weeks of weekly injections.
+- If the patient's last order with EverydayMeds was months ago (e.g. February) but they say their last injection was recent (e.g. June/July), the supply from that old order would not last until now — politely explain this and ask whether they received medication from another provider during the gap.
+- Ask for: date of last injection, strength/dose, and whether treatment came from another provider — when the scenario implies a supply/timeline mismatch.
+- If there has been a long gap, mention the order may need dose adjustment after clinical review — do not approve or reject the prescription in the message.
+- Use the order context below for dates, order numbers, and declared answers — weave in specific facts (e.g. "your last order with us was in February 2026") when available.
+
+Message format:
+- Write for the patient's encrypted chat thread (not external email — no Subject line).
+- Start with "Dear {first name}," using the patient's first name from context.
+- Professional, warm, British English — UK online pharmacy tone.
+- Be specific about what you need from the patient.
+- Mention the order is on hold while awaiting a response when appropriate.
+- Do NOT include phone numbers or MedExpress branding.
+- End with exactly:
+Kind regards,
+EveryDayMeds Clinical Team
+- Keep focused and concise unless the scenario needs more detail.
+
+Order context:
+${context || "No additional order context available."}`;
+
+  const messages = [
+    { role: "system", content: sys },
+    {
+      role: "user",
+      content: `Draft the patient message. Follow the prescriber's scenario closely — do not add unrelated clinical questions.\n\nPrescriber scenario:\n${prompt}`,
+    },
+  ];
+
+  if (openaiKey) {
+    try {
+      return stripEmailSubject(await callOpenAiEmail(messages, openaiKey));
+    } catch (e) {
+      const msg = e?.message || "OpenAI request failed.";
+      if (/failed to fetch|networkerror/i.test(msg)) {
+        throw new Error("Network error — check your internet connection and OpenAI API key in Settings.");
+      }
+      throw new Error(msg);
+    }
+  }
+
+  try {
+    return stripEmailSubject(await callServerEmail(messages, serverUrl));
+  } catch (e) {
+    const msg = e?.message || "Server request failed.";
+    if (/404/.test(msg)) {
+      throw new Error("Server URL is not available. Add your OpenAI API key in Settings → Save.");
+    }
+    if (/failed to fetch|networkerror/i.test(msg)) {
+      throw new Error("Network error — add your OpenAI API key in Settings → Save.");
+    }
+    throw new Error(msg);
+  }
+}
+
 // Forward messages from content script to side panel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (
@@ -262,6 +395,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     closeScrAndReturn(sender.tab && sender.tab.id)
       .then(sendResponse)
       .catch((e) => sendResponse({ success: false, error: e && e.message }));
+    return true;
+  }
+
+  if (message.type === "GENERATE_PATIENT_EMAIL") {
+    generatePatientEmail(message.scenario, message.context)
+      .then((text) => sendResponse({ success: true, text }))
+      .catch((e) => sendResponse({ success: false, error: e?.message || "Generation failed" }));
     return true;
   }
 

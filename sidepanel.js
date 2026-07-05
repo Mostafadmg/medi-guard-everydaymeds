@@ -142,13 +142,6 @@ function evaluateEligibility(data) {
     });
   }
 
-  if (data.treatmentGapOk === false) {
-    flags.push({
-      level: "yellow",
-      text: `Check supply — Step 3 last dose (${data.declaredLastInjection || "declared"}) is outside expected window (${data.expectedLastDoseRange || `by ${data.expectedLastDoseOkUntil || "—"}`}). Confirm use from another provider.`
-    });
-  }
-
   const hasRed = flags.some(f => f.level === "red");
   const hasYellow = flags.some(f => f.level === "yellow");
   return {
@@ -299,108 +292,10 @@ function renderBanner(data) {
     html += `<span class="tag tag-slate">⚖ ${escapeHtml(data.weight)}${extra}</span>`;
   }
   if (data.height && data.height !== "—") html += `<span class="tag tag-slate">↕ ${escapeHtml(data.height)}</span>`;
-  if (data.treatmentGapOk === false) {
-    html += `<span class="tag tag-yellow" title="Step 3 last dose is outside expected supply window">⚠ Check supply</span>`;
-  }
   // (Removed the "0/6 done" tag — the same count is shown in the
   // Prescription Steps collapse header so showing it twice was noisy.)
   document.getElementById("pb-tags").innerHTML = html;
   banner.classList.add("visible");
-}
-
-// ═══════════════════════════════════════════════
-//  ELIGIBILITY ALERT (in workflow tab)
-// ═══════════════════════════════════════════════
-
-function renderEligibilityAlert(data) {
-  const wrap = document.getElementById("elig-alert-wrap");
-  if (!wrap) return;
-  const e = evaluateEligibility(data);
-  const badge = document.getElementById("elig-badge");
-
-  if (!e.alertable) {
-    wrap.innerHTML = "";
-    if (badge) badge.style.display = "none";
-    return;
-  }
-
-  if (badge) {
-    badge.style.display = "inline-block";
-    badge.textContent = e.level === "red" ? "!" : "?";
-    badge.style.background = e.level === "red" ? "#dc2626" : "#d97706";
-  }
-
-  const issues = e.flags.filter(f => f.level === e.level);
-  const title = e.level === "red"
-    ? "Eligibility risk — REVIEW required"
-    : "Eligibility caution";
-  const intro = e.level === "red"
-    ? "One or more red flags detected. This patient may not be eligible:"
-    : "Borderline criteria detected. Verify before approving:";
-
-  wrap.innerHTML = `
-    <div class="elig-alert elig-alert-${e.level}">
-      <div class="elig-alert-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-      </div>
-      <div class="elig-alert-body">
-        <div class="elig-alert-title">${title}</div>
-        <div class="elig-alert-text">${intro}</div>
-        <ul class="elig-alert-list">
-          ${issues.slice(0, 5).map(f => `<li>${f.text}</li>`).join("")}
-          ${issues.length > 5 ? `<li><em>…and ${issues.length - 5} more — see Eligibility tab</em></li>` : ""}
-        </ul>
-      </div>
-    </div>`;
-}
-
-function renderSupplyCheckAlert(data) {
-  const wrap = document.getElementById("supply-check-wrap");
-  if (!wrap) return;
-
-  if (!data || data.supplyCheckRequired !== true) {
-    wrap.innerHTML = "";
-    wrap.style.display = "none";
-    return;
-  }
-
-  wrap.style.display = "block";
-  const pens = data.fulfilledQty || 1;
-  const penLabel = pens === 1 ? "1 pen" : `${pens} pens`;
-  const med = (data.medication || "medication").replace(/\s*®\s*/g, "® ").trim();
-  const range = data.expectedLastDoseRange || `${data.expectedLastDose || "—"} – ${data.expectedLastDoseOkUntil || "—"}`;
-  const entered = escapeHtml(data.declaredLastInjection || "—");
-
-  let answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px dashed #fcd34d; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#92400e;">Not answered in consultation</div>`;
-  if (data.anotherProviderYes) {
-    answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px solid #fdba74; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#9a3412; background:#fff7ed;">Yes — from another provider</div>`;
-  } else if (data.anotherProviderNo) {
-    answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px solid #86efac; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#166534; background:#f0fdf4;">No — not from elsewhere</div>`;
-  } else if (data.anotherProviderAnswer) {
-    answerBlock = `<div style="margin-top:8px; padding:6px 12px; border:1px solid #fcd34d; border-radius:999px; display:inline-block; font-size:11px; font-weight:700; color:#78350f; background:#fff;">${escapeHtml(data.anotherProviderAnswer)}</div>`;
-  }
-
-  wrap.innerHTML = `
-    <div style="background:#fffbeb; border:1.5px solid #fcd34d; border-radius:12px; padding:14px; margin-bottom:8px;">
-      <div style="display:flex; align-items:flex-start; gap:10px; margin-bottom:10px;">
-        <div style="width:26px; height:26px; border-radius:50%; background:#fef3c7; color:#92400e; display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0;">!</div>
-        <div>
-          <div style="font-size:13px; font-weight:800; color:#78350f;">Check your supply</div>
-          <div style="font-size:11px; color:#92400e; line-height:1.45; margin-top:3px;">Step 3 last-dose date is outside the period estimated from the previous fulfilled order.</div>
-        </div>
-      </div>
-      <div style="background:#fff; border:1px solid #fde68a; border-radius:8px; padding:10px 12px; font-size:11px; color:#57534e; line-height:1.5;">
-        Based on the previous order (<strong>${penLabel}</strong>), the last dose from that supply would have been between <strong>${escapeHtml(range)}</strong>.
-        The patient entered <strong>${entered}</strong> in Step 3 — outside that period.
-      </div>
-      <div style="margin-top:10px; font-size:11px; font-weight:700; color:#78350f;">Did they obtain ${escapeHtml(med)} from another provider?</div>
-      ${answerBlock}
-      <div style="margin-top:10px; font-size:10px; color:#92400e; font-weight:600;">${data.anotherProviderAnswer ? "Apply gap/restart SOP before approving." : "Use the Last Injection Date macro if supply question is unanswered."}</div>
-    </div>`;
 }
 
 // ═══════════════════════════════════════════════
@@ -481,8 +376,6 @@ function showWorkflow(data) {
   empty.style.display = "none";
   content.style.display = "flex";
   renderWorkflow(data);
-  renderSupplyCheckAlert(data);
-  renderEligibilityAlert(data);
   populateGapCalculatorFromOrder(data);
 }
 
@@ -816,46 +709,7 @@ async function renderQuickHolds() {
 // The token {patient_name} (or {{patient_name}}) is substituted with the
 // current patient's name on render. Line breaks, blank lines and indentation
 // are preserved verbatim when the user copies the body — plain-text clipboard.
-const EMAIL_MACROS_VERSION = 4;
-const BUILTIN_EMAIL_SIGNATURE = "Kind Regards,\nMostafa Damghani\nPharmacist Indpendant Prescriber";
-const BUILTIN_EMAIL_MACROS = [
-  {
-    name: "Height/Weight Confirmation",
-    text: "Dear Patient,\n\nIn order for us to review your order, we require your most recent height and weight measurements.\n\nPlease reply to this email with your current height and most recent weight so we can continue reviewing and processing your order.\n\nOnce we have received this information, we will be able to proceed with your order review.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Invalid Documents",
-    text: "Dear Patient,\n\nWe are contacting you to ask that you upload the required documents to your account so we can pass your order to the clinical team for review.\n\nIf you have not already done so, please upload the following documents ensuring they meet the criteria below:\n\n- A valid photo ID. The ID must be clear, readable, and in date. Please ensure all four corners of the document are visible and the details can be clearly read by the clinical team.\n\n- A full body video showing your full body in good lighting, wearing fitted clothing that clearly shows your body shape. This is required for us to verify your BMI.\n\n- A weight scale video showing both your face and the reading on the scale clearly visible and readable for the clinical team to proceed with your order.\n\nIf you are a transfer patient (previously recieved weightloss injection from a differenet provider), or have been asked to provide proof of previous use, please upload evidence such as:\n\n- Dispensing label\n- Prescription\n- Order confirmation letter\n- Previous provider correspondence\n\nThe document must clearly show:\n\n- Previous provider name\n- Full name of the patient\n- Date the prescription was issued or the order/dispensed date\n- Name and strength of the medication\n\nIf you are a starter patient and have not been asked to provide previous use proof, please ignore this section.\n\nTo help avoid delays in processing your order, please ensure the uploaded evidence meets all the above criteria. Your order may remain on hold until suitable evidence has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, the clinical team will be able to continue reviewing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Invalid Weight Scale Video",
-    text: "Dear Patient,\n\nWe are contacting you as the weight scale video has either not been uploaded, or the uploaded video does not currently meet the required criteria for clinical review.\n\nPlease upload a new weight scale video that meets the following requirements:\n\n- Your face must be clearly visible\n- The reading on the scale must be clearly visible and readable\n- The video should be clear and taken in good lighting\n- The weight reading should be shown while standing on the scale\n\nTo help avoid delays in processing your order, please ensure the uploaded video meets all the above criteria. Your order may remain on hold until a suitable video has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Invalid Full Body Video",
-    text: "Dear Patient,\n\nWe are contacting you as the full body video has either not been uploaded, or the uploaded video does not currently meet the required criteria for clinical review.\n\nPlease upload a full body video that meets the following criteria so we can pass your order to the clinical team for review:\n\n- Full body visible from head to toe\n- Face clearly visible and facing the camera\n- Good lighting with the body clearly visible\n- Wear fitted clothing that shows body shape clearly\n- Avoid loose or baggy clothing such as jumpers, oversized tops, or hoodies\n- Avoid dark clothing where possible, as this can make body shape difficult to assess\n- Video should be clear and not blurred\n\nTo help avoid delays in processing your order, please ensure the uploaded video meets all the above criteria. Your order may remain on hold until a suitable video has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Invalid Previous Prescription",
-    text: "Dear Patient,\n\nWe are contacting you as your previous use evidence of weight loss injection has either not been uploaded, or the uploaded evidence does not currently meet the required criteria for clinical review.\n\nIf you have been asked to provide proof of previous use, please upload suitable evidence such as:\n\n- Dispensing label\n- Prescription\n- Order confirmation\n- Previous provider letter or correspondence\n\nThe uploaded document must clearly show:\n\n- Previous provider name\n- Full name of the patient\n- Name and strength of the medication\n- Date the prescription was issued or the order/dispensing date\n\nPlease ensure the document is clear, readable, and not cropped or blurred.\n\nTo help avoid delays in processing your order, please ensure the uploaded evidence meets all the above criteria. Your order may remain on hold until suitable evidence has been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Need More Info",
-    text: "Dear Patient,\n\nAfter reviewing your request, we require some additional information from you in order to safely process your order.\n\nYour order will remain on hold until we receive the requested information and the clinical team has been able to review it.\n\nWe would appreciate it if you could provide more information regarding the following:\n\n{Please provide details here}\n\nOnce we receive the requested information, we will be able to continue reviewing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Last Injection Date",
-    text: "Hello there,\n\nThank you for getting back in touch.\n\nBased on the information currently available to us, it appears that your last weight loss injection may have been more than 4 weeks ago.\n\nTo help us safely assess your order and determine the most appropriate treatment plan, could you please confirm:\n\n- The date of your last injection\n- The strength/dose of your last injection\n- Whether you have received any treatment from another provider during this period\n\nIf there has been a prolonged break in treatment, it may be necessary for safety reasons to restart from a lower dose and gradually re-titrate. This helps reduce the risk of significant gastrointestinal side effects and improves treatment tolerability.\n\nYour order will remain on hold until we receive the requested information and the clinical team has been able to review it.\n\nOnce we receive your response, we will be able to continue reviewing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Comorbidity",
-    text: "Dear Patient,\n\nCurrently you do not meet the BMI eligibilty threshold for weightloss injection.\n\nTo help us complete the clinical review of your weight loss consultation, could you please confirm whether you have any medical conditions or weight-related comorbidities.\n\nExamples include, but are not limited to:\n\n- High blood pressure\n- High cholesterol\n- Prediabetes or diabetes\n- Heart disease\n- Sleep apnoea\n- PCOS\n- Osteoarthritis\n- Fatty liver disease\n- Acid reflux/GORD\n\nIf you do have any medical conditions, please upload supporting evidence in the Previous Prescription / Supporting Documents section of your account where possible. Examples may include:\n\n- GP letters\n- Clinic letters\n- Repeat prescription screenshots\n- Medication labels\n- NHS app screenshots\n- Recent medical correspondence\n\nThis helps the clinical team assess your eligibility safely and avoid delays in processing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-  {
-    name: "Invalid WS/FB Videos",
-    text: "Dear Patient,\n\nWe are contacting you as the Weight Scale Video and Full Body Video has either not been uploaded, or the uploaded video does not currently meet the required criteria for clinical review.\n\nPlease upload new videos that meet the following requirements:\n\nFull body video:\n\n- Full body visible from head to toe\n- Face clearly visible and facing the camera\n- Good lighting with the body clearly visible\n- Wear fitted clothing that shows body shape clearly\n- Avoid loose or baggy clothing such as jumpers, oversized tops, or hoodies\n- Avoid dark clothing where possible, as this can make body shape difficult to assess\n- Video should be clear and not blurred\n\nWeight scale video:\n\n- Your face must be clearly visible in the video\n- The reading on the scale must be clearly visible and readable\n- Video should be clear and taken in good lighting\n- The weight reading should be shown while standing on the scale\n\nTo help avoid delays in processing your order, please ensure the uploaded videos meet all the above criteria. Your order may remain on hold until suitable videos have been uploaded and reviewed by the clinical team.\n\nOnce uploaded, we will be able to continue processing your order.\n\n" + BUILTIN_EMAIL_SIGNATURE,
-  },
-];
+const BUILTIN_EMAIL_MACROS = typeof EDMS_FLAT_MACROS !== "undefined" ? EDMS_FLAT_MACROS : [];
 function getEmailMacros() {
   // Stored in chrome.storage.local — the full builtin set is ~8.4KB, which
   // exceeds chrome.storage.sync's 8192-byte per-item quota and would silently
@@ -1127,9 +981,7 @@ Please read the patient information leaflet supplied with your medication before
 If you have any questions or concerns, please reply to this message.
 
 Kind regards,
-
-Mostafa Damghani
-EveryDayMeds`;
+EveryDayMeds Clinical Team`;
 function getHoldDefault() {
   return new Promise((resolve) => {
     try {
