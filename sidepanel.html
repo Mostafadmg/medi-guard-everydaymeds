@@ -411,6 +411,10 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
     }
 
     /* Email-to-patient block */
+    .email-patient-block.is-hidden { display: none !important; }
+    #dose-calculator-section.is-hidden,
+    #gap-calculator-section.is-hidden,
+    #tools-divider.is-hidden { display: none !important; }
     .email-section { margin-top: 4px; display: flex; flex-direction: column; gap: 12px; }
     .email-section #email-macros { margin-bottom: 2px; }
     .email-body {
@@ -1047,25 +1051,27 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       </div>
 
       <!-- ── Email to Patient ── -->
-      <hr class="section-divider" data-label="Email to Patient" />
-      <div class="email-section">
-        <div class="rx-quick-comments" id="email-macros"></div>
-        <textarea id="email-body" class="email-body" rows="8"
-          placeholder="Pick a template above, or write your message here. {patient_name} will be replaced automatically. Line breaks and spacing are preserved when you copy."></textarea>
-        <button id="btn-copy-email" class="btn-copy-email" type="button">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          <span>Copy email</span>
-        </button>
-        <button id="btn-email-patient" class="btn-email-patient" type="button">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9l20-7z"/></svg>
-          <span>Email patient</span>
-        </button>
+      <div id="email-patient-block" class="email-patient-block is-hidden">
+        <hr class="section-divider" data-label="Email to Patient" />
+        <div class="email-section">
+          <div class="rx-quick-comments" id="email-macros"></div>
+          <textarea id="email-body" class="email-body" rows="8"
+            placeholder="Pick a template above, or write your message here. {patient_name} will be replaced automatically. Line breaks and spacing are preserved when you copy."></textarea>
+          <button id="btn-copy-email" class="btn-copy-email" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            <span>Copy email</span>
+          </button>
+          <button id="btn-email-patient" class="btn-email-patient" type="button">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9l20-7z"/></svg>
+            <span>Email patient</span>
+          </button>
+        </div>
       </div>
 
-      <hr class="section-divider" data-label="Tools" />
+      <hr class="section-divider" data-label="Tools" id="tools-divider" />
 
       <!-- ── GLP-1 Switching Calculator ── -->
-      <div id="dose-calculator-section" style="margin-top:14px;">
+      <div id="dose-calculator-section" class="is-hidden" style="margin-top:14px;">
         <div style="background:#fff; border:1.5px solid #8b5cf6; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(139,92,246,0.12);">
           <div id="dose-calc-toggle" style="background:linear-gradient(135deg,#8b5cf6,#7c3aed); color:white; padding:10px 14px; font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
             <div style="display:flex; align-items:center; gap:8px;">
@@ -1176,7 +1182,7 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       </div>
 
       <!-- ── Gap in Treatment Calculator ── -->
-      <div id="gap-calculator-section" style="margin-top:10px;">
+      <div id="gap-calculator-section" class="is-hidden" style="margin-top:10px;">
         <div style="background:#fff; border:1.5px solid #f59e0b; border-radius:12px; overflow:hidden; box-shadow:0 2px 8px rgba(245,158,11,0.12);">
           <div id="gap-calc-toggle" style="background:linear-gradient(135deg,#f59e0b,#d97706); color:white; padding:10px 14px; font-weight:600; font-size:13px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;">
             <div style="display:flex; align-items:center; gap:8px;">

@@ -48,5 +48,15 @@
       "js": ["scr-portal.js"],
       "run_at": "document_idle"
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["macros.json"],
+      "matches": [
+        "https://rx.everydaymeds.co.uk/*",
+        "https://*.replit.app/*",
+        "https://*.replit.dev/*"
+      ]
+    }
   ]
 }

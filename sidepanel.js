@@ -840,12 +840,37 @@ async function emailPatient() {
   }
 }
 
+// ── Optional-section visibility ──
+// These blocks are disabled by default and only shown when the user turns them
+// on in Settings. Stored as booleans in chrome.storage.sync.
+function applyEmailSectionVisibility(show) {
+  const block = document.getElementById("email-patient-block");
+  if (!block) return;
+  block.classList.toggle("is-hidden", !show);
+}
+
+// The two Tools calculators (GLP-1 switcher + gap-in-treatment) share the
+// "Tools" divider, which is only shown when at least one calculator is visible.
+let __showDoseCalc = false;
+let __showGapCalc = false;
+function applyToolsVisibility() {
+  const dose = document.getElementById("dose-calculator-section");
+  const gap = document.getElementById("gap-calculator-section");
+  const divider = document.getElementById("tools-divider");
+  if (dose) dose.classList.toggle("is-hidden", !__showDoseCalc);
+  if (gap) gap.classList.toggle("is-hidden", !__showGapCalc);
+  if (divider) divider.classList.toggle("is-hidden", !(__showDoseCalc || __showGapCalc));
+}
+
 // Re-render whenever the user saves new buttons in the options page.
 try {
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "sync") {
       if (changes.quick_comment_buttons) renderQuickComments();
       if (changes.quick_hold_buttons) renderQuickHolds();
+      if (changes.show_email_section) applyEmailSectionVisibility(changes.show_email_section.newValue === true);
+      if (changes.show_dose_calculator) { __showDoseCalc = changes.show_dose_calculator.newValue === true; applyToolsVisibility(); }
+      if (changes.show_gap_calculator) { __showGapCalc = changes.show_gap_calculator.newValue === true; applyToolsVisibility(); }
     }
     if (area === "local" && changes.email_macros) renderEmailMacros();
   });
@@ -854,6 +879,20 @@ try {
 renderQuickComments();
 renderQuickHolds();
 renderEmailMacros();
+try {
+  chrome.storage.sync.get(
+    { show_email_section: false, show_dose_calculator: false, show_gap_calculator: false },
+    (r) => {
+      applyEmailSectionVisibility(r.show_email_section === true);
+      __showDoseCalc = r.show_dose_calculator === true;
+      __showGapCalc = r.show_gap_calculator === true;
+      applyToolsVisibility();
+    }
+  );
+} catch (_) {
+  applyEmailSectionVisibility(false);
+  applyToolsVisibility();
+}
 document.addEventListener("DOMContentLoaded", () => {
   const cb = document.getElementById("btn-copy-email");
   if (cb) cb.addEventListener("click", copyEmailBody);

@@ -4248,40 +4248,30 @@ function getBuiltinMacroCategories() {
   return [];
 }
 
-function getSavedEmailMacrosForPopout() {
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(["email_macros"], (r) => {
-        const v = r && r.email_macros;
-        if (!Array.isArray(v) || !v.length) { resolve([]); return; }
-        const cleaned = v
-          .map((m) => ({
-            name: (m && m.name ? String(m.name) : "").trim(),
-            body: (m && m.text ? String(m.text) : "").trim(),
-          }))
-          .filter((m) => m.name && m.body)
-          .map((m) => ({ ...m, tag: "Settings", desc: "Synced from Settings → Email templates" }));
-        resolve(cleaned);
-      });
-    } catch (_) {
-      resolve([]);
+// macros.json is the single source of truth for the popout. It's loaded live
+// (bypassing any cache) so that adding/editing a macro in macros.json shows up
+// in the sidebar as soon as the extension is reloaded — no build step needed.
+// Falls back to the bundled EDMS_MACRO_CATEGORIES if the fetch ever fails.
+async function loadMacrosFromJson() {
+  try {
+    if (!chrome.runtime || !chrome.runtime.getURL) return null;
+    const url = chrome.runtime.getURL("macros.json");
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data && Array.isArray(data.categories) && data.categories.length) {
+      return data.categories;
     }
-  });
+    return null;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function getMacroCategoriesForPopout() {
-  const saved = await getSavedEmailMacrosForPopout();
-  const base = getBuiltinMacroCategories();
-  if (!saved.length) return base;
-  return [
-    {
-      id: "settings_email",
-      label: "Settings Email Templates",
-      icon: "⚙️",
-      macros: saved,
-    },
-    ...base,
-  ];
+  const live = await loadMacrosFromJson();
+  if (live && live.length) return live;
+  return getBuiltinMacroCategories();
 }
 
 function injectMacroModal() {
@@ -4439,6 +4429,13 @@ function injectMacroModal() {
       border-color: rgba(139,92,246,0.45); color: #f8fafc;
     }
     .mg-mac-list-item-name { font-weight: 700; font-size: 12.5px; line-height: 1.35; }
+    .mg-mac-num {
+      display: inline-block; min-width: 18px; padding: 0 5px; margin-right: 7px;
+      text-align: center; border-radius: 999px;
+      background: rgba(139,92,246,0.22); color: #c4b5fd;
+      font-size: 10.5px; font-weight: 800; line-height: 17px; vertical-align: middle;
+    }
+    .mg-mac-list-item.active .mg-mac-num { background: rgba(139,92,246,0.4); color: #ede9fe; }
     .mg-mac-list-item-meta { font-size: 10.5px; color: #64748b; margin-top: 3px; }
     .mg-mac-list-item.active .mg-mac-list-item-meta { color: #a78bfa; }
     .mg-mac-list-item.custom-item {
@@ -5128,7 +5125,7 @@ function injectMacroModal() {
 
   function macroMatches(m, q) {
     if (!q) return true;
-    const hay = `${m.name} ${m.desc || ""} ${m.tag || ""} ${m.body}`.toLowerCase();
+    const hay = `#${m.num || ""} ${m.num || ""} ${m.name} ${m.desc || ""} ${m.tag || ""} ${m.body}`.toLowerCase();
     return hay.includes(q);
   }
 
@@ -5168,7 +5165,7 @@ function injectMacroModal() {
     const q = (searchEl.value || "").trim();
     detailEmpty.style.display = "none";
     detailContent.classList.add("visible");
-    detailName.innerHTML = highlight(m.name, q);
+    detailName.innerHTML = `${m.num ? `<span class="mg-mac-num">${m.num}</span>` : ""}${highlight(m.name, q)}`;
     detailDesc.innerHTML = m.desc ? highlight(m.desc, q) : "";
     detailDesc.style.display = m.desc ? "block" : "none";
     if (m.tag) {
@@ -5269,7 +5266,7 @@ function injectMacroModal() {
       btn.className = "mg-mac-list-item" + (key === selectedKey ? " active" : "");
       btn.setAttribute("role", "option");
       btn.innerHTML = `
-        <div class="mg-mac-list-item-name">${highlight(m.name, q)}</div>
+        <div class="mg-mac-list-item-name">${m.num ? `<span class="mg-mac-num">${m.num}</span>` : ""}${highlight(m.name, q)}</div>
         ${m.desc ? `<div class="mg-mac-list-item-meta">${highlight(m.desc, q)}</div>` : ""}
       `;
       btn.addEventListener("click", () => {

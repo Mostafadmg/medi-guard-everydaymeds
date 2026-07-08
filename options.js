@@ -99,7 +99,6 @@ const BUILTIN_QUICK_HOLDS = [
     text: "Waiting for patient to upload the required documents to verify identity and proof of previous use.",
   },
 ];
-const BUILTIN_EMAIL_MACROS = typeof EDMS_FLAT_MACROS !== "undefined" ? EDMS_FLAT_MACROS : [];
 
 document.addEventListener("DOMContentLoaded", () => {
   const serverUrlInput = document.getElementById("serverUrl");
@@ -180,24 +179,13 @@ document.addEventListener("DOMContentLoaded", () => {
     emptyMsg: 'No quick hold-reason buttons. Click "+ Add button" to create one.',
     builtin: BUILTIN_QUICK_HOLDS,
   });
-  const emMgr = makeQuickChipManager({
-    listId: "emailMacrosList", addBtnId: "addEmailMacro", resetBtnId: "resetEmailMacros",
-    namePlaceholder: "Template title (e.g. General)",
-    textPlaceholder: 'Email body. Use {patient_name} where the patient name should appear. Whitespace, indentation and line breaks are preserved when copied.',
-    emptyMsg: 'No email templates. Click "+ Add template" to create one.',
-    builtin: BUILTIN_EMAIL_MACROS,
-  });
-
   chrome.storage.sync.get(
     ["server_url", "openai_key", "assistant_id", "initialized",
      "default_scr_text", "default_scr_accessed_text", "default_counselling_text", "default_rationale_text", "default_hold_reason",
      "default_approve_patient_message",
-     "quick_comment_buttons", "quick_hold_buttons", "email_macros", "ui_zoom", "show_workflow_steps"],
-    (syncResult) => { chrome.storage.local.get(["email_macros", "email_macros_version"], (localResult) => {
-      const result = Object.assign({}, syncResult, {
-        email_macros: localResult.email_macros,
-        email_macros_version: localResult.email_macros_version,
-      });
+     "quick_comment_buttons", "quick_hold_buttons", "ui_zoom", "show_workflow_steps", "show_email_section",
+     "show_dose_calculator", "show_gap_calculator"],
+    (result) => {
       if (DEFAULT_SERVER_URL && !result.initialized) {
         chrome.storage.sync.set({ server_url: DEFAULT_SERVER_URL, initialized: true });
         serverUrlInput.value = DEFAULT_SERVER_URL;
@@ -216,26 +204,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (approvePatientMsgInput) approvePatientMsgInput.value = result.default_approve_patient_message || BUILTIN_APPROVE_PATIENT_MESSAGE;
       const showStepsInput = document.getElementById("showWorkflowSteps");
       if (showStepsInput) showStepsInput.checked = result.show_workflow_steps !== false;
+      const showEmailInput = document.getElementById("showEmailSection");
+      if (showEmailInput) showEmailInput.checked = result.show_email_section === true;
+      const showDoseInput = document.getElementById("showDoseCalculator");
+      if (showDoseInput) showDoseInput.checked = result.show_dose_calculator === true;
+      const showGapInput = document.getElementById("showGapCalculator");
+      if (showGapInput) showGapInput.checked = result.show_gap_calculator === true;
       const qcSaved = Array.isArray(result.quick_comment_buttons) ? result.quick_comment_buttons : null;
       qcMgr.render(qcSaved && qcSaved.length ? qcSaved : BUILTIN_QUICK_COMMENTS);
       const qhSaved = Array.isArray(result.quick_hold_buttons) ? result.quick_hold_buttons : null;
       qhMgr.render(qhSaved && qhSaved.length ? qhSaved : BUILTIN_QUICK_HOLDS);
-      const emSaved = Array.isArray(result.email_macros) ? result.email_macros : null;
-      // Version-based migration: when the builtin library is updated (e.g. new
-      // Comorbidity template), bump EMAIL_MACROS_VERSION and stale saves are
-      // replaced. Stored in chrome.storage.local because the full set is >8KB,
-      // which exceeds chrome.storage.sync's per-item quota and would silently
-      // fail to save (the bug behind manual adds not persisting).
-      const versionMismatch = result.email_macros_version !== EMAIL_MACROS_VERSION;
-      const emToRender = (!emSaved || !emSaved.length || versionMismatch)
-        ? BUILTIN_EMAIL_MACROS
-        : emSaved;
-      emMgr.render(emToRender);
-      if (!emSaved || !emSaved.length || versionMismatch) {
-        try { chrome.storage.local.set({ email_macros: BUILTIN_EMAIL_MACROS, email_macros_version: EMAIL_MACROS_VERSION }); } catch {}
-        // Clean up any stale email_macros stuck in sync storage.
-        try { chrome.storage.sync.remove("email_macros"); } catch {}
-      }
 
       // UI zoom slider (80–150%, default 100)
       const zoomInput = document.getElementById("uiZoom");
@@ -250,7 +228,7 @@ document.addEventListener("DOMContentLoaded", () => {
           zoomValue.textContent = zoomInput.value + "%";
         });
       }
-    }); }
+    }
   );
 
   resetBtn.addEventListener("click", () => {
@@ -262,6 +240,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (approvePatientMsgInput) approvePatientMsgInput.value = BUILTIN_APPROVE_PATIENT_MESSAGE;
     const showStepsInput = document.getElementById("showWorkflowSteps");
     if (showStepsInput) showStepsInput.checked = true;
+    const showEmailInput = document.getElementById("showEmailSection");
+    if (showEmailInput) showEmailInput.checked = false;
+    const showDoseInput = document.getElementById("showDoseCalculator");
+    if (showDoseInput) showDoseInput.checked = false;
+    const showGapInput = document.getElementById("showGapCalculator");
+    if (showGapInput) showGapInput.checked = false;
   });
 
   saveBtn.addEventListener("click", () => {
@@ -275,6 +259,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const holdText = (holdInput?.value || "").trim();
     const approvePatientMsgText = (approvePatientMsgInput?.value || "").trim();
     const showWorkflowSteps = document.getElementById("showWorkflowSteps")?.checked !== false;
+    const showEmailSection = document.getElementById("showEmailSection")?.checked === true;
+    const showDoseCalculator = document.getElementById("showDoseCalculator")?.checked === true;
+    const showGapCalculator = document.getElementById("showGapCalculator")?.checked === true;
 
     if (!serverUrl && !key) {
       statusDiv.textContent = "⚠️ Please enter a Server URL or API key.";
@@ -296,6 +283,9 @@ document.addEventListener("DOMContentLoaded", () => {
       quick_comment_buttons: qcMgr.read(),
       quick_hold_buttons: qhMgr.read(),
       show_workflow_steps: showWorkflowSteps,
+      show_email_section: showEmailSection,
+      show_dose_calculator: showDoseCalculator,
+      show_gap_calculator: showGapCalculator,
       ui_zoom: (() => {
         const el = document.getElementById("uiZoom");
         let z = parseInt(el && el.value, 10);
@@ -307,14 +297,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (key) settings.openai_key = key;
     if (assistantId) settings.assistant_id = assistantId;
 
-    // Email macros live in chrome.storage.local (sync's 8KB per-item quota
-    // is too small for the full builtin set + any user-added templates).
-    try {
-      chrome.storage.local.set({
-        email_macros: emMgr.read(),
-        email_macros_version: EMAIL_MACROS_VERSION,
-      });
-    } catch {}
     chrome.storage.sync.set(settings, () => {
       let msg = "✅ <strong>Saved!</strong><br>";
       if (serverUrl) msg += `Server: ${serverUrl}<br>`;
