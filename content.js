@@ -4409,7 +4409,7 @@ function injectMacroModal() {
     }
 
     #mg-macro-list {
-      flex: 1; overflow-y: auto; padding: 6px 8px 12px;
+      flex: 1; overflow-y: auto; padding: 6px 12px 12px;
     }
     #mg-macro-list::-webkit-scrollbar, #mg-macro-detail-preview::-webkit-scrollbar,
     #mg-macro-cat-nav::-webkit-scrollbar { width: 7px; }
@@ -4509,8 +4509,26 @@ function injectMacroModal() {
       flex: 1; display: flex; flex-direction: column; min-height: 0;
     }
     #mg-macro-write-pane[hidden], #mg-macro-ai-pane[hidden] { display: none !important; }
-    #mg-macro-ai-intro {
-      padding: 14px 20px 0; font-size: 12px; color: #94a3b8; line-height: 1.45; flex-shrink: 0;
+    .mg-ai-top-bar {
+      display: flex; justify-content: flex-end; align-items: center;
+      padding: 8px 20px 0; flex-shrink: 0; min-height: 0;
+    }
+    #mg-macro-ai-history-toggle {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 10px; border-radius: 8px;
+      border: 1px solid #334155; background: #1e293b;
+      color: #94a3b8; font: 600 11px/1 inherit; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    #mg-macro-ai-history-toggle[hidden] { display: none !important; }
+    #mg-macro-ai-history-toggle:hover { background: #283548; color: #e2e8f0; }
+    #mg-macro-ai-history-toggle[aria-expanded="true"] {
+      border-color: rgba(139,92,246,0.45); color: #c4b5fd; background: rgba(139,92,246,0.12);
+    }
+    #mg-macro-ai-history-count {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+      background: rgba(139,92,246,0.25); color: #c4b5fd; font-size: 10px;
     }
     #mg-macro-ai-pane label {
       display: block; padding: 10px 20px 6px; font-size: 10px; font-weight: 700;
@@ -4537,23 +4555,77 @@ function injectMacroModal() {
       padding: 12px 20px; flex-shrink: 0;
     }
     #mg-macro-ai-result-actions {
-      display: flex; flex-wrap: wrap; gap: 10px; padding: 0 20px 16px; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 20px; flex-shrink: 0;
+      border-top: 1px solid #1e293b; background: #0f172a;
     }
     #mg-macro-ai-result-actions[hidden] { display: none !important; }
+    #mg-macro-ai-result-actions .mg-mac-btn {
+      flex: 1 1 0; justify-content: center; min-height: 40px;
+    }
+    #mg-macro-ai-result-actions .mg-mac-btn.secondary {
+      flex: 0 0 auto; min-width: 72px;
+    }
     #mg-macro-ai-status {
       font-size: 11.5px; color: #94a3b8; flex: 1; min-width: 120px;
     }
     #mg-macro-ai-status.error { color: #f87171; }
     #mg-macro-ai-status.success { color: #4ade80; }
+    #mg-macro-ai-chat-log {
+      margin: 6px 20px 0; max-height: 160px; overflow-y: auto;
+      border: 1px solid #334155; border-radius: 8px; background: #0b1220;
+      padding: 10px 12px; flex-shrink: 0;
+    }
+    #mg-macro-ai-chat-log[hidden] { display: none !important; }
+    #mg-macro-ai-chat-log:empty { display: none; }
+    .mg-ai-chat-turn { margin-bottom: 8px; font-size: 11.5px; line-height: 1.4; }
+    .mg-ai-chat-turn:last-child { margin-bottom: 0; }
+    .mg-ai-chat-turn.user { color: #c4b5fd; }
+    .mg-ai-chat-turn.assistant { color: #94a3b8; }
+    .mg-ai-chat-turn strong { color: #e2e8f0; font-weight: 700; }
+    #mg-macro-ai-dropzone {
+      margin: 8px 20px 8px; padding: 12px 14px; border-radius: 10px;
+      border: 1px dashed #475569; background: rgba(15,23,42,0.6);
+      color: #64748b; font-size: 11.5px; text-align: center; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    #mg-macro-ai-dropzone.dragover {
+      border-color: #8b5cf6; background: rgba(139,92,246,0.12); color: #c4b5fd;
+    }
+    #mg-macro-ai-attach-list {
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 0 20px 8px;
+    }
+    #mg-macro-ai-attach-list:empty { display: none; }
+    .mg-ai-attach-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 8px 4px 4px; border-radius: 8px;
+      background: #1e293b; border: 1px solid #334155;
+      font-size: 11px; color: #cbd5e1; max-width: 100%;
+    }
+    .mg-ai-attach-chip img {
+      width: 28px; height: 28px; object-fit: cover; border-radius: 4px;
+    }
+    .mg-ai-attach-chip button {
+      background: none; border: none; color: #94a3b8; cursor: pointer;
+      font-size: 14px; line-height: 1; padding: 0 2px;
+    }
+    .mg-ai-attach-chip button:hover { color: #f87171; }
+    .mg-ai-web-toggle {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11px; color: #94a3b8; cursor: pointer; user-select: none;
+    }
+    .mg-ai-web-toggle input { accent-color: #8b5cf6; }
     .mg-mac-btn.ai-btn {
       background: linear-gradient(180deg, #a855f7, #9333ea);
       box-shadow: 0 3px 8px rgba(147,51,234,0.35);
     }
     .mg-mac-btn.ai-btn:disabled { opacity: 0.6; cursor: wait; transform: none; }
     #mg-macro-detail-actions {
-      display: flex; gap: 10px; padding: 14px 20px;
-      border-top: 1px solid #1e293b; background: #0f172a; flex-shrink: 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 12px 20px; border-top: 1px solid #1e293b;
+      background: #0f172a; flex-shrink: 0;
     }
+    #mg-macro-detail-actions .mg-mac-btn { flex: 1 1 0; justify-content: center; min-height: 40px; }
     .mg-mac-btn {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer;
@@ -4742,15 +4814,26 @@ function injectMacroModal() {
             </div>
           </div>
           <div id="mg-macro-ai-pane" hidden>
-            <div id="mg-macro-ai-intro">Describe the scenario — AI will draft a patient message for you to review.</div>
-            <label for="mg-macro-ai-prompt">Your scenario</label>
-            <textarea id="mg-macro-ai-prompt" rows="4" placeholder="e.g. Patient has gallstones on SCR — ask if they had cholecystectomy and when…"></textarea>
-            <div class="mg-macro-ai-actions">
-              <button type="button" class="mg-mac-btn ai-btn" id="mg-macro-ai-generate">✨ Generate with AI</button>
-              <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-settings" title="Open extension Settings">Settings</button>
-              <span id="mg-macro-ai-status">Paste your OpenAI key in Settings → Save</span>
+            <div class="mg-ai-top-bar">
+              <button type="button" id="mg-macro-ai-history-toggle" hidden title="Show conversation history" aria-expanded="false">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                History <span id="mg-macro-ai-history-count">0</span>
+              </button>
             </div>
-            <label for="mg-macro-ai-result" id="mg-macro-ai-result-label" hidden>Generated message</label>
+            <div id="mg-macro-ai-chat-log" hidden></div>
+            <div id="mg-macro-ai-dropzone">Drop screenshots, PDFs, or text files here — click to browse, or paste (Ctrl+V)</div>
+            <div id="mg-macro-ai-attach-list"></div>
+            <label for="mg-macro-ai-prompt" id="mg-macro-ai-prompt-label">Your instructions</label>
+            <textarea id="mg-macro-ai-prompt" rows="3" placeholder="e.g. Last order Feb 2026 but they say recent injection — ask if another provider…"></textarea>
+            <div class="mg-macro-ai-actions">
+              <button type="button" class="mg-mac-btn ai-btn" id="mg-macro-ai-generate">✨ Generate</button>
+              <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-new-chat" title="Start a new conversation">New chat</button>
+              <label class="mg-ai-web-toggle" title="Search the web for factual context (Tavily key in Settings for best results)">
+                <input type="checkbox" id="mg-macro-ai-web-search" /> Web search
+              </label>
+              <span id="mg-macro-ai-status">Add your OpenAI API key in Settings → Save</span>
+            </div>
+            <label for="mg-macro-ai-result" id="mg-macro-ai-result-label" hidden>Current draft</label>
             <textarea id="mg-macro-ai-result" rows="10" readonly spellcheck="true" aria-label="AI generated message" hidden></textarea>
             <div id="mg-macro-ai-result-actions" hidden>
               <button type="button" class="mg-mac-btn" id="mg-macro-ai-use-editor">Use in editor</button>
@@ -4783,24 +4866,98 @@ function injectMacroModal() {
   const customTabs = panel.querySelector("#mg-macro-custom-tabs");
   const writePane = panel.querySelector("#mg-macro-write-pane");
   const aiPane = panel.querySelector("#mg-macro-ai-pane");
+  const aiDropzone = panel.querySelector("#mg-macro-ai-dropzone");
+  const aiAttachList = panel.querySelector("#mg-macro-ai-attach-list");
+  const aiHistoryToggle = panel.querySelector("#mg-macro-ai-history-toggle");
+  const aiHistoryCount = panel.querySelector("#mg-macro-ai-history-count");
+  const aiChatLog = panel.querySelector("#mg-macro-ai-chat-log");
+  const aiPromptLabel = panel.querySelector("#mg-macro-ai-prompt-label");
   const aiPrompt = panel.querySelector("#mg-macro-ai-prompt");
   const aiResult = panel.querySelector("#mg-macro-ai-result");
   const aiResultLabel = panel.querySelector("#mg-macro-ai-result-label");
   const aiResultActions = panel.querySelector("#mg-macro-ai-result-actions");
   const aiGenerateBtn = panel.querySelector("#mg-macro-ai-generate");
-  const aiSettingsBtn = panel.querySelector("#mg-macro-ai-settings");
+  const aiNewChatBtn = panel.querySelector("#mg-macro-ai-new-chat");
+  const aiWebSearch = panel.querySelector("#mg-macro-ai-web-search");
   const aiUseEditorBtn = panel.querySelector("#mg-macro-ai-use-editor");
   const aiInsertChatBtn = panel.querySelector("#mg-macro-ai-insert-chat");
   const aiCopyResultBtn = panel.querySelector("#mg-macro-ai-copy-result");
   const aiStatus = panel.querySelector("#mg-macro-ai-status");
+  const aiFileInput = document.createElement("input");
+  aiFileInput.type = "file";
+  aiFileInput.multiple = true;
+  aiFileInput.accept = "image/*,.pdf,.txt,.csv,.doc,.docx";
+  aiFileInput.hidden = true;
+  aiPane?.appendChild(aiFileInput);
   let aiGenerating = false;
   let customDetailMode = "write";
+  let aiChatHistory = [];
+  let aiAttachments = [];
+  let aiAttachSeq = 0;
+  let aiHistoryLogOpen = false;
+  const macroSessionCache = {
+    orderKey: null,
+    customDetailMode: "write",
+    aiChatHistory: [],
+    aiDraft: "",
+    aiPromptText: "",
+    customPreview: "",
+    webSearch: false,
+  };
+
+  function currentMacroSessionKey() {
+    const d = lastScannedData || {};
+    if (d.orderNo) return `order:${d.orderNo}`;
+    try {
+      const sub = document.querySelector(".chat-panel-sub");
+      if (sub?.textContent) return `patient:${String(sub.textContent).trim()}`;
+    } catch (_) {}
+    return "session:default";
+  }
+
+  function saveMacroModalSession() {
+    macroSessionCache.orderKey = currentMacroSessionKey();
+    macroSessionCache.customDetailMode = customDetailMode;
+    macroSessionCache.aiChatHistory = aiChatHistory.slice();
+    macroSessionCache.aiDraft = aiResult?.value || "";
+    macroSessionCache.aiPromptText = aiPrompt?.value || "";
+    macroSessionCache.customPreview = (detailPreview?.dataset.macroKey === CUSTOM_MACRO_KEY)
+      ? String(detailPreview?.value || "")
+      : macroSessionCache.customPreview;
+    macroSessionCache.webSearch = !!aiWebSearch?.checked;
+  }
+
+  function restoreMacroModalSession() {
+    const key = currentMacroSessionKey();
+    if (macroSessionCache.orderKey !== key) {
+      macroSessionCache.orderKey = key;
+      return false;
+    }
+    customDetailMode = macroSessionCache.customDetailMode || "write";
+    aiChatHistory = macroSessionCache.aiChatHistory.slice();
+    if (aiPrompt) aiPrompt.value = macroSessionCache.aiPromptText || "";
+    if (aiWebSearch) aiWebSearch.checked = macroSessionCache.webSearch;
+    if (macroSessionCache.customPreview && detailPreview) {
+      detailPreview.value = macroSessionCache.customPreview;
+      detailPreview.dataset.macroKey = CUSTOM_MACRO_KEY;
+    }
+    renderAiChatLog();
+    updateAiGenerateBtnLabel();
+    if (macroSessionCache.aiDraft) showAiResult(macroSessionCache.aiDraft);
+    if (selectedKey === CUSTOM_MACRO_KEY) {
+      setCustomDetailMode(customDetailMode);
+      refreshAiStatusHint();
+    }
+    return true;
+  }
 
   async function refreshAiStatusHint() {
     if (!aiStatus || selectedKey !== CUSTOM_MACRO_KEY || customDetailMode !== "ai") return;
     const { openaiKey } = await getAiSettings();
     if (openaiKey) {
-      setAiStatus("OpenAI key configured — press Enter or click Generate.");
+      setAiStatus(aiChatHistory.length
+        ? "Press Enter or Refine to improve the draft."
+        : "OpenAI ready — attach screenshots, enable web search, press Enter.");
     } else {
       setAiStatus("Add your OpenAI API key in Settings → Save.", "error");
     }
@@ -4895,12 +5052,19 @@ function injectMacroModal() {
     const firstName = getPatientName();
     if (fullName) lines.push(`Patient full name: ${fullName}`);
     else if (firstName && firstName !== "there") lines.push(`Patient first name: ${firstName}`);
+    if (d.dob) lines.push(`Date of birth: ${d.dob}`);
+    if (d.age != null) lines.push(`Age: ${d.age}`);
+    if (d.gender) lines.push(`Sex: ${d.gender}`);
+    if (d.ethnicity) lines.push(`Ethnicity: ${d.ethnicity}`);
     if (d.orderNo) lines.push(`Current order #: ${d.orderNo}`);
     if (d.orderDate) lines.push(`Current order date: ${d.orderDate}`);
     if (d.medication) lines.push(`Medication ordered: ${d.medication}${d.dose ? ` ${d.dose}` : ""}`);
     if (d.qty) lines.push(`Current order quantity (pens): ${d.qty}`);
+    if (d.prescriptionType) lines.push(`Prescription type: ${d.prescriptionType}`);
     if (d.bmi != null) lines.push(`BMI: ${d.bmi}`);
-    if (d.age != null) lines.push(`Age: ${d.age}`);
+    if (d.height) lines.push(`Height: ${d.height}`);
+    if (d.weight) lines.push(`Weight: ${d.weight}`);
+    if (d.hasComorbidity) lines.push(`Comorbidity declared in consultation: yes`);
     if (d.fulfilledOrderNo) lines.push(`Last fulfilled order with us #: ${d.fulfilledOrderNo}`);
     if (d.fulfilledOrderDate) lines.push(`Last order date with us: ${d.fulfilledOrderDate}`);
     if (d.fulfilledDate) lines.push(`Last order fulfilled/dispatched: ${d.fulfilledDate}`);
@@ -4929,11 +5093,41 @@ function injectMacroModal() {
         lines.push(`Note: significant gap since last EverydayMeds order — if patient claims a recent injection, one pen order would not cover that period; consider asking about another provider/source.`);
       }
     }
+    if (Array.isArray(d.bmiHistory) && d.bmiHistory.length) {
+      lines.push("BMI history:");
+      d.bmiHistory.forEach((b) => {
+        const tag = b.isCurrent ? " (current)" : b.isStart ? " (start)" : "";
+        lines.push(`  - ${b.date}${tag}: BMI ${b.bmi ?? "—"}${b.weight && b.weight !== "—" ? `, weight ${b.weight}` : ""}`);
+      });
+    }
     if (Array.isArray(d.flags) && d.flags.length) {
       lines.push(`Clinical flags on order: ${d.flags.map(f => f.text).join("; ")}`);
     }
     if (Array.isArray(d.patientTags) && d.patientTags.length) {
       lines.push(`Patient tags: ${d.patientTags.join(", ")}`);
+    }
+    if (d.documentsVerified || d.documentsPending || d.documentsRejected) {
+      lines.push(`Documents: ${d.documentsVerified || 0} verified, ${d.documentsPending || 0} pending, ${d.documentsRejected || 0} rejected`);
+    }
+    if (Array.isArray(d.documents) && d.documents.length) {
+      lines.push("Uploaded documents on order:");
+      d.documents.forEach((doc) => {
+        lines.push(`  - ${doc.title}${doc.subtitle ? ` (${doc.subtitle})` : ""}: ${doc.status}${doc.kind ? ` [${doc.kind}]` : ""}`);
+      });
+    }
+    if (d.scrStatus) lines.push(`SCR card visible on order page: ${d.scrStatus}`);
+    if (Array.isArray(d.notes) && d.notes.length) {
+      lines.push("Prescriber notes on order:");
+      d.notes.forEach((n) => lines.push(`  - ${n}`));
+    }
+    if (Array.isArray(d.consultationAnswers) && d.consultationAnswers.length) {
+      lines.push(`Full consultation (${d.consultationAnswers.length} Q&A — use these facts only, do not invent answers):`);
+      d.consultationAnswers.forEach((qa, i) => {
+        const q = String(qa.question || "").trim();
+        let a = String(qa.answer || "").trim();
+        if (a.length > 600) a = a.slice(0, 597) + "…";
+        if (q || a) lines.push(`  ${i + 1}. Q: ${q}\n     A: ${a || "—"}`);
+      });
     }
     const chatSnippet = getRecentChatSnippet();
     if (chatSnippet) lines.push(`Recent patient chat:\n${chatSnippet}`);
@@ -4955,15 +5149,197 @@ function injectMacroModal() {
     });
   }
 
-  async function generateEmailWithAI(scenario) {
-    const prompt = (scenario || "").trim();
-    if (!prompt) throw new Error("Describe the scenario first.");
+  function truncateAiText(text, max) {
+    const s = String(text || "").replace(/\s+/g, " ").trim();
+    if (s.length <= max) return s;
+    return s.slice(0, max - 1) + "…";
+  }
 
+  function updateAiGenerateBtnLabel() {
+    if (!aiGenerateBtn) return;
+    aiGenerateBtn.textContent = aiChatHistory.length ? "✨ Refine" : "✨ Generate";
+    if (aiPromptLabel) {
+      aiPromptLabel.textContent = aiChatHistory.length
+        ? "Refine the draft"
+        : "Your instructions";
+    }
+    if (aiPrompt) {
+      aiPrompt.placeholder = aiChatHistory.length
+        ? "e.g. Make it shorter, mention order on hold, add February order date…"
+        : "e.g. Last order Feb 2026 but they say recent injection — ask if another provider…";
+    }
+  }
+
+  function renderAiChatLog() {
+    if (!aiChatLog) return;
+    if (!aiChatHistory.length) {
+      aiChatLog.hidden = true;
+      aiChatLog.innerHTML = "";
+      aiHistoryLogOpen = false;
+      if (aiHistoryToggle) {
+        aiHistoryToggle.hidden = true;
+        aiHistoryToggle.setAttribute("aria-expanded", "false");
+      }
+      return;
+    }
+    const exchangeCount = Math.ceil(aiChatHistory.length / 2);
+    if (aiHistoryToggle) {
+      aiHistoryToggle.hidden = false;
+      aiHistoryToggle.setAttribute("aria-expanded", aiHistoryLogOpen ? "true" : "false");
+    }
+    if (aiHistoryCount) aiHistoryCount.textContent = String(exchangeCount);
+    aiChatLog.innerHTML = aiChatHistory.map((turn) => {
+      const label = turn.role === "user" ? "You" : "Draft";
+      const preview = turn.role === "user"
+        ? truncateAiText(turn.content, 200)
+        : truncateAiText(turn.content, 120);
+      return `<div class="mg-ai-chat-turn ${turn.role}"><strong>${label}:</strong> ${esc(preview)}</div>`;
+    }).join("");
+    aiChatLog.hidden = !aiHistoryLogOpen;
+    if (aiHistoryLogOpen) aiChatLog.scrollTop = aiChatLog.scrollHeight;
+  }
+
+  function renderAiAttachments() {
+    if (!aiAttachList) return;
+    aiAttachList.innerHTML = "";
+    aiAttachments.forEach((att) => {
+      const chip = document.createElement("span");
+      chip.className = "mg-ai-attach-chip";
+      if (att.kind === "image" && att.dataUrl) {
+        chip.innerHTML = `<img src="${att.dataUrl}" alt="" /><span>${esc(att.name)}</span>`;
+      } else {
+        chip.innerHTML = `<span>📄 ${esc(att.name)}</span>`;
+      }
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.setAttribute("aria-label", "Remove attachment");
+      rm.textContent = "×";
+      rm.addEventListener("click", () => {
+        aiAttachments = aiAttachments.filter(a => a.id !== att.id);
+        renderAiAttachments();
+      });
+      chip.appendChild(rm);
+      aiAttachList.appendChild(chip);
+    });
+  }
+
+  function fileToDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function fileToArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function extractPdfPlainText(buffer) {
+    const bytes = new Uint8Array(buffer);
+    let raw = "";
+    for (let i = 0; i < bytes.length; i++) {
+      const c = bytes[i];
+      raw += c >= 32 && c <= 126 ? String.fromCharCode(c) : " ";
+    }
+    const chunks = [];
+    const parenMatches = raw.match(/\(([^\\)]{2,800})\)/g) || [];
+    parenMatches.forEach((m) => {
+      const t = m.slice(1, -1).replace(/\\([nrtbf()\\])/g, " ").trim();
+      if (t.length > 1 && /[a-zA-Z0-9]/.test(t)) chunks.push(t);
+    });
+    const tjMatches = raw.match(/(?:^|[\s>])([A-Za-z0-9][A-Za-z0-9 ,.'\-/]{2,120})\s*Tj/g) || [];
+    tjMatches.forEach((m) => {
+      const t = m.replace(/\s*Tj$/, "").trim();
+      if (t.length > 2) chunks.push(t);
+    });
+    return [...new Set(chunks)].join(" ").replace(/\s+/g, " ").trim();
+  }
+
+  async function readFileAsAiText(file) {
+    const name = (file.name || "").toLowerCase();
+    const type = (file.type || "").toLowerCase();
+    if (type.startsWith("text/") || /\.(txt|csv|json|xml|html|md|log|rtf)$/i.test(name)) {
+      try { return String(await file.text()).trim(); } catch (_) { return ""; }
+    }
+    if (type === "application/pdf" || name.endsWith(".pdf")) {
+      const buf = await fileToArrayBuffer(file);
+      return extractPdfPlainText(buf);
+    }
+    if (
+      type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      || name.endsWith(".docx")
+    ) {
+      return "";
+    }
+    try { return String(await file.text()).trim(); } catch (_) { return ""; }
+  }
+
+  async function addAiFiles(fileList) {
+    const files = [...(fileList || [])];
+    for (const file of files) {
+      if (!file) continue;
+      const id = `att-${++aiAttachSeq}`;
+      const name = file.name || "file";
+      const type = (file.type || "").toLowerCase();
+      if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name)) {
+        const dataUrl = await fileToDataUrl(file);
+        if (String(dataUrl).length > 4_500_000) {
+          setAiStatus(`${name} is too large — use a smaller screenshot.`, "error");
+          continue;
+        }
+        aiAttachments.push({ id, name, mediaType: file.type || "image/png", dataUrl, kind: "image" });
+        continue;
+      }
+      const text = await readFileAsAiText(file);
+      if (!text || text.length < 8) {
+        if (type === "application/pdf" || name.endsWith(".pdf")) {
+          setAiStatus(`${name}: could not extract text — try a screenshot of the page instead.`, "error");
+        } else if (name.endsWith(".docx")) {
+          setAiStatus(`${name}: Word files not supported yet — save as PDF or screenshot.`, "error");
+        } else {
+          setAiStatus(`${name}: no readable text found.`, "error");
+        }
+        continue;
+      }
+      aiAttachments.push({
+        id, name, mediaType: file.type || "text/plain",
+        text: String(text).slice(0, 20000), kind: "text",
+      });
+    }
+    renderAiAttachments();
+  }
+
+  function resetAiChat() {
+    aiChatHistory = [];
+    aiAttachments = [];
+    aiHistoryLogOpen = false;
+    if (aiPrompt) aiPrompt.value = "";
+    hideAiResult();
+    renderAiChatLog();
+    renderAiAttachments();
+    updateAiGenerateBtnLabel();
+    refreshAiStatusHint();
+    macroSessionCache.aiChatHistory = [];
+    macroSessionCache.aiDraft = "";
+    macroSessionCache.aiPromptText = "";
+  }
+
+  async function generateEmailWithAI(payload) {
     return new Promise((resolve, reject) => {
       try {
         chrome.runtime.sendMessage({
           type: "GENERATE_PATIENT_EMAIL",
-          scenario: prompt,
+          userMessage: payload.userMessage,
+          history: payload.history || [],
+          attachments: payload.attachments || [],
+          webSearch: !!payload.webSearch,
           context: buildEmailAiContext(),
         }, (resp) => {
           if (chrome.runtime.lastError) {
@@ -4993,6 +5369,7 @@ function injectMacroModal() {
     if (aiPane) aiPane.hidden = customDetailMode !== "ai";
     if (customDetailMode === "ai") {
       refreshAiStatusHint();
+      updateAiGenerateBtnLabel();
       if (aiPrompt) aiPrompt.focus();
     } else if (detailPreview) {
       detailPreview.focus();
@@ -5026,20 +5403,41 @@ function injectMacroModal() {
 
   async function runAiGenerate() {
     if (aiGenerating || !aiPrompt) return;
-    const scenario = aiPrompt.value.trim();
-    if (!scenario) {
-      setAiStatus("Describe the scenario first.", "error");
+    const userMessage = aiPrompt.value.trim();
+    if (!userMessage && !aiAttachments.length) {
+      setAiStatus(aiChatHistory.length ? "Type a refinement note first." : "Describe the scenario or attach a file.", "error");
       aiPrompt.focus();
       return;
     }
     aiGenerating = true;
     if (aiGenerateBtn) aiGenerateBtn.disabled = true;
-    hideAiResult();
-    setAiStatus("Generating draft…");
+    const isRefine = aiChatHistory.length > 0;
+    setAiStatus(isRefine ? "Refining draft…" : (aiWebSearch?.checked ? "Searching & drafting…" : "Generating draft…"));
     try {
-      const draft = await generateEmailWithAI(scenario);
+      const attachmentsPayload = aiAttachments.map(({ name, mediaType, dataUrl, text, kind }) => ({
+        name, mediaType, dataUrl, text, kind,
+      }));
+      const draft = await generateEmailWithAI({
+        userMessage: userMessage || "Use the attached file(s) to draft the patient message.",
+        history: aiChatHistory,
+        attachments: attachmentsPayload,
+        webSearch: aiWebSearch?.checked,
+      });
+      if (userMessage) {
+        aiChatHistory.push({ role: "user", content: userMessage });
+      } else if (aiAttachments.length) {
+        aiChatHistory.push({ role: "user", content: `[Attached ${aiAttachments.length} file(s)]` });
+      }
+      aiChatHistory.push({ role: "assistant", content: draft });
+      aiPrompt.value = "";
+      aiAttachments = [];
+      renderAiAttachments();
+      renderAiChatLog();
       showAiResult(draft);
-      setAiStatus("Draft ready — copy, insert into chat, or use in editor.", "success");
+      updateAiGenerateBtnLabel();
+      saveMacroModalSession();
+      setAiStatus("Draft ready — type another note below to refine, or use in editor.", "success");
+      aiPrompt.focus();
     } catch (e) {
       setAiStatus(e?.message || "Generation failed.", "error");
     } finally {
@@ -5054,6 +5452,7 @@ function injectMacroModal() {
     if (!draft) return;
     detailPreview.value = draft;
     detailPreview.dataset.macroKey = CUSTOM_MACRO_KEY;
+    macroSessionCache.customPreview = draft;
     setCustomDetailMode("write");
     detailPreview.focus();
     try { detailPreview.setSelectionRange(detailPreview.value.length, detailPreview.value.length); } catch (_) {}
@@ -5175,21 +5574,30 @@ function injectMacroModal() {
       detailTag.style.display = "none";
     }
     if (detailPreview.dataset.macroKey !== selectedKey) {
-      detailPreview.value = fillPlaceholders(m.body);
-      detailPreview.dataset.macroKey = selectedKey;
-      if (selectedKey === CUSTOM_MACRO_KEY) {
-        customDetailMode = "write";
-        hideAiResult();
+      if (selectedKey === CUSTOM_MACRO_KEY
+          && macroSessionCache.orderKey === currentMacroSessionKey()
+          && (macroSessionCache.customPreview || macroSessionCache.aiDraft)) {
+        detailPreview.value = macroSessionCache.customPreview || fillPlaceholders(m.body);
+        detailPreview.dataset.macroKey = selectedKey;
+      } else {
+        detailPreview.value = fillPlaceholders(m.body);
+        detailPreview.dataset.macroKey = selectedKey;
+        if (selectedKey === CUSTOM_MACRO_KEY && macroSessionCache.orderKey !== currentMacroSessionKey()) {
+          customDetailMode = "write";
+          resetAiChat();
+        }
       }
     }
     const isCustom = selectedKey === CUSTOM_MACRO_KEY;
     if (detailHead) detailHead.classList.toggle("compact", isCustom);
     if (customTabs) customTabs.hidden = !isCustom;
     if (isCustom) {
+      restoreMacroModalSession();
       if (customDetailMode !== "write" && customDetailMode !== "ai") customDetailMode = "write";
       setCustomDetailMode(customDetailMode);
       refreshAiStatusHint();
     } else {
+      saveMacroModalSession();
       customDetailMode = "write";
       if (writePane) writePane.hidden = false;
       if (aiPane) aiPane.hidden = true;
@@ -5386,13 +5794,15 @@ function injectMacroModal() {
     const ok = await ensureNativeChatOpen();
     if (!ok) return;
     selectedKey = CUSTOM_MACRO_KEY;
-    customDetailMode = "write";
-    hideAiResult();
     embedNativeChat();
     openPanel();
     renderList();
     renderDetail();
-    setTimeout(() => detailPreview.focus(), 120);
+    restoreMacroModalSession();
+    setTimeout(() => {
+      if (customDetailMode === "ai") aiPrompt?.focus();
+      else detailPreview?.focus();
+    }, 120);
   }
 
   async function openMacrosOnlyModal() {
@@ -5401,6 +5811,9 @@ function injectMacroModal() {
       await sleep(220);
     }
     openPanel();
+    if (selectedKey === CUSTOM_MACRO_KEY || !selectedKey) {
+      restoreMacroModalSession();
+    }
   }
 
   async function refreshMacroData() {
@@ -5422,6 +5835,7 @@ function injectMacroModal() {
   }
 
   function closePanel() {
+    saveMacroModalSession();
     if (commsMode) {
       unembedNativeChat();
       const nativeClose = document.getElementById("od2ChatPanelClose");
@@ -5446,12 +5860,11 @@ function injectMacroModal() {
   copyBtn.addEventListener("click", copySelected);
   insertBtn.addEventListener("click", insertIntoChat);
   if (aiGenerateBtn) aiGenerateBtn.addEventListener("click", runAiGenerate);
-  if (aiSettingsBtn) {
-    aiSettingsBtn.addEventListener("click", () => {
-      try {
-        if (chrome.runtime.openOptionsPage) chrome.runtime.openOptionsPage();
-        else window.open(chrome.runtime.getURL("options.html"));
-      } catch (_) {}
+  if (aiNewChatBtn) aiNewChatBtn.addEventListener("click", resetAiChat);
+  if (aiHistoryToggle) {
+    aiHistoryToggle.addEventListener("click", () => {
+      aiHistoryLogOpen = !aiHistoryLogOpen;
+      renderAiChatLog();
     });
   }
   if (customTabs) {
@@ -5489,7 +5902,42 @@ function injectMacroModal() {
       e.preventDefault();
       runAiGenerate();
     });
+    aiPrompt.addEventListener("paste", (e) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const files = [];
+      for (const item of items) {
+        if (item.kind === "file") {
+          const f = item.getAsFile();
+          if (f) files.push(f);
+        }
+      }
+      if (files.length) {
+        e.preventDefault();
+        addAiFiles(files);
+      }
+    });
   }
+  if (aiDropzone) {
+    aiDropzone.addEventListener("click", () => aiFileInput.click());
+    aiDropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      aiDropzone.classList.add("dragover");
+    });
+    aiDropzone.addEventListener("dragleave", () => aiDropzone.classList.remove("dragover"));
+    aiDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      aiDropzone.classList.remove("dragover");
+      addAiFiles(e.dataTransfer?.files);
+    });
+  }
+  if (aiFileInput) {
+    aiFileInput.addEventListener("change", () => {
+      addAiFiles(aiFileInput.files);
+      aiFileInput.value = "";
+    });
+  }
+  updateAiGenerateBtnLabel();
   searchEl.addEventListener("input", () => { renderCatNav(); renderList(); });
 
   const _keydownHandler = (e) => {
@@ -5510,7 +5958,7 @@ function injectMacroModal() {
         if (area === "local" && changes.email_macros && document.getElementById("mg-macro-panel")) {
           try { refreshMacroData(); } catch (_) {}
         }
-        if (area === "sync" && (changes.openai_key || changes.server_url)) {
+        if (area === "sync" && (changes.openai_key || changes.server_url || changes.tavily_api_key)) {
           try { refreshAiStatusHint(); } catch (_) {}
         }
       });

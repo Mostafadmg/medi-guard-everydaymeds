@@ -16,7 +16,9 @@
     "https://portal.spineservices.nhs.uk/*",
     "https://*.replit.app/*",
     "https://*.replit.dev/*",
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://api.tavily.com/*",
+    "https://api.duckduckgo.com/*"
   ],
   "background": {
     "service_worker": "background.js"

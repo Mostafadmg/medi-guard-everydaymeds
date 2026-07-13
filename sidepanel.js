@@ -698,8 +698,28 @@ async function renderQuickHolds() {
       ta.focus();
       try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch {}
       ta.dispatchEvent(new Event("input", { bubbles: true }));
+      setHoldQuickDropdownOpen(false);
     });
     wrap.appendChild(btn);
+  });
+}
+
+function setHoldQuickDropdownOpen(open) {
+  const dropdown = document.getElementById("hold-quick-dropdown");
+  const toggle = document.getElementById("hold-quick-toggle");
+  if (!dropdown || !toggle) return;
+  dropdown.classList.toggle("is-open", open);
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+function initHoldQuickDropdown() {
+  const dropdown = document.getElementById("hold-quick-dropdown");
+  const toggle = document.getElementById("hold-quick-toggle");
+  if (!dropdown || !toggle || toggle.dataset.bound) return;
+  toggle.dataset.bound = "1";
+  setHoldQuickDropdownOpen(false);
+  toggle.addEventListener("click", () => {
+    setHoldQuickDropdownOpen(!dropdown.classList.contains("is-open"));
   });
 }
 
@@ -878,6 +898,7 @@ try {
 // Initial render — runs after the script tag at end-of-body, so DOM is ready.
 renderQuickComments();
 renderQuickHolds();
+initHoldQuickDropdown();
 renderEmailMacros();
 try {
   chrome.storage.sync.get(
@@ -904,48 +925,64 @@ document.addEventListener("DOMContentLoaded", () => {
   if (emptyBackdrop) emptyBackdrop.addEventListener("click", hideEmptyEmailModal);
 }, { once: true });
 
-// ── SCR mode toggles (mutually exclusive) ──
+// ── SCR mode toggles (segmented radio) ──
+function formatScrModeTime(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString("en-GB", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function updateScrModeTimestamp(mode, iso) {
+  const el = document.getElementById("scr-mode-time");
+  if (!el) return;
+  const label = mode === "accessed" ? "SCR accessed" : "SCR not accessed";
+  const when = formatScrModeTime(iso);
+  el.textContent = when ? `${label} · ${when}` : "";
+}
+
 function getScrMode() {
   const accessed = document.getElementById("scr-accessed");
   return accessed && accessed.checked ? "accessed" : "not_accessed";
 }
+
 function initScrModeToggles() {
   const notAccessed = document.getElementById("scr-not-accessed");
   const accessed = document.getElementById("scr-accessed");
   if (!notAccessed || !accessed) return;
 
-  function applyMode(mode) {
+  function applyMode(mode, atIso) {
     const isAccessed = mode === "accessed";
     notAccessed.checked = !isAccessed;
     accessed.checked = isAccessed;
+    updateScrModeTimestamp(mode, atIso);
   }
 
   try {
-    chrome.storage.sync.get(["scr_mode"], (r) => {
-      applyMode(r && r.scr_mode === "accessed" ? "accessed" : "not_accessed");
+    chrome.storage.sync.get(["scr_mode", "scr_mode_at"], (r) => {
+      const mode = r && r.scr_mode === "accessed" ? "accessed" : "not_accessed";
+      applyMode(mode, r && r.scr_mode_at);
     });
   } catch {}
 
   function saveMode(mode) {
-    try { chrome.storage.sync.set({ scr_mode: mode }); } catch {}
+    const at = new Date().toISOString();
+    updateScrModeTimestamp(mode, at);
+    try { chrome.storage.sync.set({ scr_mode: mode, scr_mode_at: at }); } catch {}
   }
 
   notAccessed.addEventListener("change", () => {
-    if (notAccessed.checked) {
-      accessed.checked = false;
-      saveMode("not_accessed");
-    } else if (!accessed.checked) {
-      notAccessed.checked = true;
-    }
+    if (notAccessed.checked) saveMode("not_accessed");
   });
   accessed.addEventListener("change", () => {
-    if (accessed.checked) {
-      notAccessed.checked = false;
-      saveMode("accessed");
-    } else if (!notAccessed.checked) {
-      notAccessed.checked = true;
-      saveMode("not_accessed");
-    }
+    if (accessed.checked) saveMode("accessed");
   });
 }
 
@@ -1030,14 +1067,42 @@ function getHoldDefault() {
     } catch (_) { resolve(HOLD_BUILTIN_REASON); }
   });
 }
-function getApprovePatientMessage() {
+function getPatientCounsellingSettings() {
   return new Promise((resolve) => {
     try {
-      chrome.storage.sync.get(["default_approve_patient_message"], (r) => {
-        resolve((r && r.default_approve_patient_message) || APPROVE_PATIENT_MESSAGE_BUILTIN);
+      chrome.storage.sync.get(
+        ["send_patient_counselling_on_approve", "patient_counselling_templates", "default_approve_patient_message"],
+        (r) => {
+          const enabled = r && r.send_patient_counselling_on_approve !== false;
+          let templates = Array.isArray(r?.patient_counselling_templates)
+            ? r.patient_counselling_templates.filter((t) => t && t.text)
+            : [];
+          if (!templates.length && r?.default_approve_patient_message) {
+            templates = [{ name: "Default", text: r.default_approve_patient_message, active: true }];
+          }
+          if (!templates.length) {
+            templates = [{ name: "Default", text: APPROVE_PATIENT_MESSAGE_BUILTIN, active: true }];
+          }
+          const active = templates.find((t) => t.active) || templates[0];
+          resolve({
+            enabled,
+            message: active?.text || APPROVE_PATIENT_MESSAGE_BUILTIN,
+            templateName: active?.name || "Default",
+          });
+        }
+      );
+    } catch (_) {
+      resolve({
+        enabled: true,
+        message: APPROVE_PATIENT_MESSAGE_BUILTIN,
+        templateName: "Default",
       });
-    } catch (_) { resolve(APPROVE_PATIENT_MESSAGE_BUILTIN); }
+    }
   });
+}
+
+function getApprovePatientMessage() {
+  return getPatientCounsellingSettings().then((s) => s.message);
 }
 async function placeOnHold() {
   const btn = document.getElementById("btn-place-hold");
@@ -1282,20 +1347,22 @@ async function bulkApproveOrUndo() {
     await new Promise(r => setTimeout(r, 180));
   }
 
-  // After a successful Approve-all sweep, send the configurable counselling
-  // message through encrypted patient chat. Best-effort — failure is logged
+  // After a successful Approve-all sweep, optionally send the active counselling
+  // template through encrypted patient chat. Best-effort — failure is logged
   // via toast but does not change the approval result.
   if (mode === "approve" && ok > 0 && fail === 0) {
     try {
-      btn.innerHTML = `${SPIN_SVG}<span>Sending patient message…</span>`;
-      const template = await getApprovePatientMessage();
-      const message = substituteEmail(template).trim();
-      if (message) {
-        const cResp = await msgContent({ type: "SEND_PATIENT_MESSAGE", text: message });
-        if (cResp?.success) {
-          toast("Counselling message sent to patient", "success", 1800);
-        } else if (cResp?.error) {
-          toast(`Message not sent: ${cResp.error}`, "error", 2400);
+      const counselling = await getPatientCounsellingSettings();
+      if (counselling.enabled) {
+        btn.innerHTML = `${SPIN_SVG}<span>Sending patient message…</span>`;
+        const message = substituteEmail(counselling.message).trim();
+        if (message) {
+          const cResp = await msgContent({ type: "SEND_PATIENT_MESSAGE", text: message });
+          if (cResp?.success) {
+            toast(`Counselling sent (${counselling.templateName})`, "success", 1800);
+          } else if (cResp?.error) {
+            toast(`Message not sent: ${cResp.error}`, "error", 2400);
+          }
         }
       }
     } catch (_) { /* silent */ }

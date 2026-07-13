@@ -47,6 +47,9 @@ If you have any questions or concerns, please reply to this message.
 
 Kind regards,
 EveryDayMeds Clinical Team`;
+const BUILTIN_PATIENT_COUNSELLING_TEMPLATES = [
+  { id: "default", name: "Default GLP-1 counselling", text: BUILTIN_APPROVE_PATIENT_MESSAGE, active: true },
+];
 const BUILTIN_QUICK_COMMENTS = [
   {
     name: "Repeat",
@@ -103,13 +106,14 @@ const BUILTIN_QUICK_HOLDS = [
 document.addEventListener("DOMContentLoaded", () => {
   const serverUrlInput = document.getElementById("serverUrl");
   const apiKeyInput = document.getElementById("apiKey");
+  const tavilyKeyInput = document.getElementById("tavilyKey");
   const assistantIdInput = document.getElementById("assistantId");
   const scrAccessedInput = document.getElementById("scrAccessedText");
   const scrInput = document.getElementById("scrText");
   const counsellingInput = document.getElementById("counsellingText");
   const rationaleInput = document.getElementById("rationaleText");
   const holdInput = document.getElementById("holdReasonText");
-  const approvePatientMsgInput = document.getElementById("approvePatientMessageText");
+  const sendPatientCounsellingInput = document.getElementById("sendPatientCounselling");
   const saveBtn = document.getElementById("save");
   const resetBtn = document.getElementById("resetDefaults");
   const statusDiv = document.getElementById("status");
@@ -179,10 +183,150 @@ document.addEventListener("DOMContentLoaded", () => {
     emptyMsg: 'No quick hold-reason buttons. Click "+ Add button" to create one.',
     builtin: BUILTIN_QUICK_HOLDS,
   });
+
+  let ptSeq = 0;
+  function nextPtId() {
+    return `pt-${Date.now()}-${++ptSeq}`;
+  }
+
+  function makePatientCounsellingManager({ listId, addBtnId, resetBtnId, emptyMsg, builtin }) {
+    const listEl = document.getElementById(listId);
+    const addBtn = document.getElementById(addBtnId);
+    const resetBtn = document.getElementById(resetBtnId);
+
+    function syncActiveStyles() {
+      listEl.querySelectorAll(".pt-row").forEach((row) => {
+        const active = row.querySelector(".pt-active input")?.checked;
+        row.classList.toggle("is-active", !!active);
+      });
+    }
+
+    function renderRow(item) {
+      const row = document.createElement("div");
+      row.className = "pt-row";
+      row.dataset.id = item.id || nextPtId();
+      row.innerHTML = `
+        <div class="pt-row-head">
+          <label class="pt-active">
+            <input type="radio" name="patient_counselling_active" />
+            Active
+          </label>
+          <input type="text" class="pt-name" placeholder="Template name (e.g. Mounjaro, Wegovy first dose)" />
+          <button type="button" class="pt-del" title="Remove this template">Delete</button>
+        </div>
+        <textarea class="pt-text" rows="14" placeholder="Dear Patient,&#10;&#10;Your order has been approved…"></textarea>
+      `;
+      row.querySelector(".pt-name").value = (item && item.name) || "";
+      row.querySelector(".pt-text").value = (item && item.text) || "";
+      row.querySelector(".pt-active input").checked = !!(item && item.active);
+      row.querySelector(".pt-active input").addEventListener("change", () => {
+        if (row.querySelector(".pt-active input").checked) {
+          listEl.querySelectorAll(".pt-active input").forEach((input) => {
+            if (input !== row.querySelector(".pt-active input")) input.checked = false;
+          });
+        } else {
+          row.querySelector(".pt-active input").checked = true;
+        }
+        syncActiveStyles();
+      });
+      row.querySelector(".pt-del").addEventListener("click", () => {
+        const rows = listEl.querySelectorAll(".pt-row");
+        if (rows.length <= 1) {
+          statusDiv.textContent = "Keep at least one counselling template.";
+          statusDiv.className = "status";
+          return;
+        }
+        const wasActive = row.querySelector(".pt-active input").checked;
+        row.remove();
+        if (wasActive) {
+          const first = listEl.querySelector(".pt-row .pt-active input");
+          if (first) first.checked = true;
+        }
+        if (!listEl.querySelector(".pt-row")) renderEmpty();
+        syncActiveStyles();
+      });
+      syncActiveStyles();
+      return row;
+    }
+
+    function renderEmpty() {
+      listEl.innerHTML = `<div class="qc-empty">${emptyMsg}</div>`;
+    }
+
+    function render(items) {
+      listEl.innerHTML = "";
+      const list = Array.isArray(items) && items.length ? items : builtin.slice();
+      let hasActive = list.some((it) => it.active);
+      list.forEach((it, i) => {
+        const item = { ...it, id: it.id || nextPtId(), active: hasActive ? !!it.active : i === 0 };
+        listEl.appendChild(renderRow(item));
+      });
+      syncActiveStyles();
+    }
+
+    function read() {
+      const out = [];
+      listEl.querySelectorAll(".pt-row").forEach((row) => {
+        const name = row.querySelector(".pt-name").value.trim();
+        const text = row.querySelector(".pt-text").value.trim();
+        const active = row.querySelector(".pt-active input").checked;
+        if (name && text) {
+          out.push({
+            id: row.dataset.id || nextPtId(),
+            name,
+            text,
+            active,
+          });
+        }
+      });
+      if (out.length && !out.some((t) => t.active)) out[0].active = true;
+      if (out.filter((t) => t.active).length > 1) {
+        let seen = false;
+        out.forEach((t) => {
+          if (t.active && !seen) seen = true;
+          else t.active = false;
+        });
+      }
+      return out;
+    }
+
+    addBtn.addEventListener("click", () => {
+      if (listEl.querySelector(".qc-empty")) listEl.innerHTML = "";
+      listEl.querySelectorAll(".pt-active input").forEach((input) => { input.checked = false; });
+      listEl.appendChild(renderRow({ id: nextPtId(), name: "", text: "", active: true }));
+      syncActiveStyles();
+    });
+    resetBtn.addEventListener("click", () => render(builtin));
+    return { render, read };
+  }
+
+  const ptMgr = makePatientCounsellingManager({
+    listId: "patientCounsellingList",
+    addBtnId: "addPatientCounselling",
+    resetBtnId: "resetPatientCounselling",
+    emptyMsg: 'No counselling templates. Click "+ Add template" to create one.',
+    builtin: BUILTIN_PATIENT_COUNSELLING_TEMPLATES,
+  });
+
+  function migratePatientCounsellingTemplates(result) {
+    const saved = Array.isArray(result.patient_counselling_templates)
+      ? result.patient_counselling_templates.filter((t) => t && t.name && t.text)
+      : null;
+    if (saved && saved.length) return saved;
+    if (result.default_approve_patient_message) {
+      return [{
+        id: "default",
+        name: "Default GLP-1 counselling",
+        text: result.default_approve_patient_message,
+        active: true,
+      }];
+    }
+    return BUILTIN_PATIENT_COUNSELLING_TEMPLATES;
+  }
   chrome.storage.sync.get(
-    ["server_url", "openai_key", "assistant_id", "initialized",
+    ["server_url", "openai_key", "tavily_api_key", "assistant_id", "initialized",
      "default_scr_text", "default_scr_accessed_text", "default_counselling_text", "default_rationale_text", "default_hold_reason",
-     "default_approve_patient_message",
+     "default_approve_patient_message", "send_patient_counselling_on_approve", "patient_counselling_templates",
      "quick_comment_buttons", "quick_hold_buttons", "ui_zoom", "show_workflow_steps", "show_email_section",
      "show_dose_calculator", "show_gap_calculator"],
     (result) => {
@@ -195,13 +339,17 @@ document.addEventListener("DOMContentLoaded", () => {
         serverUrlInput.value = result.server_url;
       }
       if (result.openai_key) apiKeyInput.value = result.openai_key;
+      if (tavilyKeyInput && result.tavily_api_key) tavilyKeyInput.value = result.tavily_api_key;
       if (result.assistant_id) assistantIdInput.value = result.assistant_id;
       if (scrAccessedInput) scrAccessedInput.value = result.default_scr_accessed_text || BUILTIN_SCR_ACCESSED;
       scrInput.value = result.default_scr_text || BUILTIN_SCR;
       counsellingInput.value = result.default_counselling_text || BUILTIN_COUNSELLING;
       rationaleInput.value = result.default_rationale_text || BUILTIN_RATIONALE;
       if (holdInput) holdInput.value = result.default_hold_reason || BUILTIN_HOLD;
-      if (approvePatientMsgInput) approvePatientMsgInput.value = result.default_approve_patient_message || BUILTIN_APPROVE_PATIENT_MESSAGE;
+      if (sendPatientCounsellingInput) {
+        sendPatientCounsellingInput.checked = result.send_patient_counselling_on_approve !== false;
+      }
+      ptMgr.render(migratePatientCounsellingTemplates(result));
       const showStepsInput = document.getElementById("showWorkflowSteps");
       if (showStepsInput) showStepsInput.checked = result.show_workflow_steps !== false;
       const showEmailInput = document.getElementById("showEmailSection");
@@ -237,7 +385,8 @@ document.addEventListener("DOMContentLoaded", () => {
     counsellingInput.value = BUILTIN_COUNSELLING;
     rationaleInput.value = BUILTIN_RATIONALE;
     if (holdInput) holdInput.value = BUILTIN_HOLD;
-    if (approvePatientMsgInput) approvePatientMsgInput.value = BUILTIN_APPROVE_PATIENT_MESSAGE;
+    if (sendPatientCounsellingInput) sendPatientCounsellingInput.checked = true;
+    ptMgr.render(BUILTIN_PATIENT_COUNSELLING_TEMPLATES);
     const showStepsInput = document.getElementById("showWorkflowSteps");
     if (showStepsInput) showStepsInput.checked = true;
     const showEmailInput = document.getElementById("showEmailSection");
@@ -251,13 +400,16 @@ document.addEventListener("DOMContentLoaded", () => {
   saveBtn.addEventListener("click", () => {
     const serverUrl = serverUrlInput.value.trim();
     const key = apiKeyInput.value.trim();
+    const tavilyKey = tavilyKeyInput?.value.trim() || "";
     const assistantId = assistantIdInput.value.trim();
     const scrAccessedText = (scrAccessedInput?.value || "").trim();
     const scrText = scrInput.value.trim();
     const counsellingText = counsellingInput.value.trim();
     const rationaleText = rationaleInput.value.trim();
     const holdText = (holdInput?.value || "").trim();
-    const approvePatientMsgText = (approvePatientMsgInput?.value || "").trim();
+    const counsellingTemplates = ptMgr.read();
+    const sendPatientCounselling = sendPatientCounsellingInput?.checked !== false;
+    const activeTemplate = counsellingTemplates.find((t) => t.active) || counsellingTemplates[0];
     const showWorkflowSteps = document.getElementById("showWorkflowSteps")?.checked !== false;
     const showEmailSection = document.getElementById("showEmailSection")?.checked === true;
     const showDoseCalculator = document.getElementById("showDoseCalculator")?.checked === true;
@@ -279,7 +431,11 @@ document.addEventListener("DOMContentLoaded", () => {
       default_counselling_text: counsellingText || BUILTIN_COUNSELLING,
       default_rationale_text: rationaleText || BUILTIN_RATIONALE,
       default_hold_reason: holdText || BUILTIN_HOLD,
-      default_approve_patient_message: approvePatientMsgText || BUILTIN_APPROVE_PATIENT_MESSAGE,
+      send_patient_counselling_on_approve: sendPatientCounselling,
+      patient_counselling_templates: counsellingTemplates.length
+        ? counsellingTemplates
+        : BUILTIN_PATIENT_COUNSELLING_TEMPLATES,
+      default_approve_patient_message: (activeTemplate && activeTemplate.text) || BUILTIN_APPROVE_PATIENT_MESSAGE,
       quick_comment_buttons: qcMgr.read(),
       quick_hold_buttons: qhMgr.read(),
       show_workflow_steps: showWorkflowSteps,
@@ -295,6 +451,7 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     if (serverUrl) settings.server_url = serverUrl.replace(/\/$/, "");
     if (key) settings.openai_key = key;
+    if (tavilyKey) settings.tavily_api_key = tavilyKey;
     if (assistantId) settings.assistant_id = assistantId;
 
     chrome.storage.sync.set(settings, () => {

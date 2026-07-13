@@ -1,6 +1,6 @@
 {
   "signature": "Kind regards,\nEveryDayMeds Clinical Team",
-  "version": 10,
+  "version": 11,
   "categories": [
     {
       "id": "scr",
@@ -146,6 +146,41 @@
           "tag": "Clinical",
           "desc": "Injection site redness/swelling/pain",
           "body": "Dear {patient_name},\n\nThank you for getting in touch about your injection site reaction.\n\nMild reactions at the injection site such as redness, swelling, or discomfort are common and usually resolve on their own within a few days.\n\nTo help reduce injection site reactions:\n• Rotate your injection sites (thigh, abdomen, upper arm)\n• Allow the medication to reach room temperature before injecting\n• Ensure the injection site is clean and dry\n• Apply a cold compress after injecting if needed\n\nIf the reaction persists for more than a week, spreads beyond the injection site, or you develop signs of infection (increasing redness, warmth, pus, or fever), please contact your GP.\n\nKind regards,\nEveryDayMeds Clinical Team"
+        },
+        {
+          "num": 35,
+          "name": "Clinical - Fatty Liver Disease",
+          "tag": "Clinical",
+          "desc": "Counselling for patients with fatty liver disease diagnosis",
+          "body": "Dear {patient_name},\n\nThank you for showing interest in our weight loss programme. I have prescribed your treatment and you should receive confirmation of this via email.\n\nYou mentioned in your online consultation that you have a diagnosis of fatty liver disease.\n\nPlease be aware that fatty liver disease can progress to liver impairment. This medication should be used cautiously if you have abnormal liver function. It is important to attend regular monitoring with your GP. Please let your GP know you have started this medication and contact us if your medical situation changes.\n\nIf you have any further questions, please reply to this message.\n\nKind regards,\nEveryDayMeds Clinical Team"
+        },
+        {
+          "num": 36,
+          "name": "Clinical - Mental Health Prescribing Info",
+          "tag": "Clinical",
+          "desc": "Important mental health safety-netting when prescribing",
+          "body": "Dear {patient_name},\n\nImportant information about your prescription\n\nPlease be aware there are some reports that medications of this kind can increase feelings of depression and suicidal thoughts in rare circumstances. If at any stage you feel you are experiencing worsening depression symptoms or have any thoughts of self-harm or suicide, please seek urgent help and stop the medication immediately.\n\nOur clinicians are not able to manage any mental health conditions and you should follow up regularly with your usual GP to support you for this — it is important to inform them that you are taking this medication. If you feel that you are struggling, please seek out professional help as soon as possible at the following services:\n\n• NHS GP — first point of contact if not an emergency\n• NHS 111 service\n• Local mental health services and therapies (if applicable to you): https://www.nhs.uk/nhs-services/mental-health-services/how-to-find-local-mental-health-services/\n\nIf at any stage you feel you are in crisis or are experiencing suicidal thoughts, you must urgently contact the emergency services for help (anytime, 24 hours):\n\n• For emergency or crisis support call 999 / Samaritans 116 123\n• Local crisis team number (if applicable to you)\n\nKind regards,\nEveryDayMeds Clinical Team"
+        },
+        {
+          "num": 37,
+          "name": "Clinical - Thyroid Monitoring",
+          "tag": "Clinical",
+          "desc": "Thyroid monitoring advice when prescribing GLP-1",
+          "body": "Dear {patient_name},\n\nImportant information about your prescription\n\nThank you for showing interest in our weight loss programme. I have prescribed your treatment and you should receive confirmation of this via email.\n\nAlthough this medicine is not expected to affect your thyroid function, it is advisable to have frequent thyroid monitoring at the beginning of the treatment. Please contact your GP to arrange this.\n\nKind regards,\nEveryDayMeds Clinical Team"
+        },
+        {
+          "num": 38,
+          "name": "Clinical - Spacing Doses",
+          "tag": "Clinical",
+          "desc": "Advise against spacing out weekly injections",
+          "body": "Dear {patient_name},\n\nI understand that you may have considered spacing out your doses, but I must advise against it. The manufacturer's safety and licensed use for this medication does not recommend spacing out doses as it may compromise the effectiveness and safety of the medication. In the unlikely event of an adverse reaction, the manufacturer would not take responsibility.\n\nAdditionally, once a pen has been opened, it expires after 30 days, so there is a risk that you may have been injecting expired medication. Can you please confirm when you opened your last pen?\n\nIf you feel that you can go longer between doses, I would recommend reviewing the dose you are currently on. It would be better to administer a lower dose weekly than to go against the manufacturer's licensed use.\n\nKind regards,\nEveryDayMeds Clinical Team"
+        },
+        {
+          "num": 39,
+          "name": "Clinical - Diabetes on Metformin (Sick Day Rule)",
+          "tag": "Clinical",
+          "desc": "Sick day rule for patients on Wegovy/Mounjaro and Metformin",
+          "body": "Dear {patient_name},\n\nIn the event of feeling unwell, particularly if your illness impacts your appetite or gastrointestinal system, making it difficult to maintain the standard three meals a day, we advise temporarily discontinuing the use of Wegovy/Mounjaro to minimise risks of malnourishment or dehydration.\n\nIt is recommended to skip a dose until a full recovery is achieved. This sick day rule ensures the optimal effectiveness of Wegovy/Mounjaro while prioritising your well-being during periods of illness.\n\nIt would also be recommended to reach out to your GP so that they can review your Metformin dose, as dehydration increases the risk of serious side-effects such as lactic acidosis.\n\nHypoglycaemia (low blood sugar) may occur if you are unable to eat or drink due to feeling unwell, and is a medical emergency requiring urgent treatment. If you experience any symptoms such as:\n\n• Sweating\n• Dizziness\n• Tingling lips\n• Shaky/trembling\n• Palpitations\n• Irritability\n• Pale skin\n\nPlease see the following link for more information: https://www.nhs.uk/conditions/low-blood-sugar-hypoglycaemia/\n\nPlease make sure to keep us updated if you become unwell and a break in treatment is required.\n\nKind regards,\nEveryDayMeds Clinical Team"
         }
       ]
     },
@@ -237,6 +272,13 @@
           "tag": "Weight",
           "desc": "BMI 27.5-30 - confirm comorbidity",
           "body": "Dear {patient_name},\n\nCurrently you do not meet the BMI eligibility threshold for weight loss injection without a confirmed comorbidity.\n\nTo help us complete the clinical review of your weight loss consultation, could you please confirm whether you have any medical conditions or weight-related comorbidities.\n\nExamples include, but are not limited to:\n\n- High blood pressure\n- High cholesterol\n- Prediabetes or diabetes\n- Heart disease\n- Sleep apnoea\n- PCOS\n- Osteoarthritis\n- Fatty liver disease\n- Acid reflux/GORD\n\nIf you do have any medical conditions, please upload supporting evidence where possible (GP letters, clinic letters, prescription screenshots, NHS app screenshots, etc.).\n\nThis helps the clinical team assess your eligibility safely and avoid delays in processing your order.\n\nKind regards,\nEveryDayMeds Clinical Team"
+        },
+        {
+          "num": 40,
+          "name": "Weight - More Than 10% Weight Loss",
+          "tag": "Weight",
+          "desc": "Query notable weight loss over 10% since last check-in",
+          "body": "Dear {patient_name},\n\nI have noticed a notable change in your weight since your last check-in. This level of weight loss can be a normal response to treatment for some individuals, but it is important to ensure that this change aligns with your health goals and overall well-being.\n\nCan you please reconfirm your most recent weight measurement?\n\nAdditionally, to help us provide you with the best possible support, we kindly request that you answer all of the following questions before we prescribe your next order:\n\n• Are you experiencing any side effects, such as vomiting or diarrhoea? If so, please provide details on how often (i.e. daily or weekly) and severity (mild, moderate or severe)\n• Are you experiencing any signs of dehydration, such as excessive thirst, dry mouth, dark-coloured urine, dizziness, or fatigue?\n• Have there been any changes to your medical condition, history, or medication you are currently taking? Please provide details about any new diagnoses or treatments started, including antibiotics, steroids, or antidepressants.\n• How frequently and consistently are you administering your injections? Please mention if there have been any missed doses or changes in your injection schedule.\n• Are you eating the recommended daily required amount of protein in your diet? This is approximately 0.75g of protein per kilo of body weight per day. Sometimes rapid weight loss can reduce muscle mass, so it's important to maintain a balanced diet to support muscle health.\n\nWeight loss of over 10% can be a positive indicator of your treatment's effectiveness and it is often within the expected range for some individuals. However, it is crucial to ensure that this weight loss is sustainable and healthy for you. By providing your responses, we can assess your situation more accurately and offer tailored advice to support your continued success.\n\nYour order will be placed on hold whilst we await your response.\n\nKind regards,\nEveryDayMeds Clinical Team"
         }
       ]
     },

@@ -229,13 +229,135 @@ function stripEmailSubject(text) {
 
 function getAiSettingsFromStorage() {
   return new Promise((resolve) => {
-    chrome.storage.sync.get(["server_url", "openai_key"], (r) => {
+    chrome.storage.sync.get(["server_url", "openai_key", "tavily_api_key"], (r) => {
       resolve({
         serverUrl: (r && r.server_url) ? String(r.server_url).replace(/\/$/, "") : "",
         openaiKey: (r && r.openai_key) ? String(r.openai_key) : "",
+        tavilyKey: (r && r.tavily_api_key) ? String(r.tavily_api_key) : "",
       });
     });
   });
+}
+
+async function searchWebForAi(query, tavilyKey) {
+  const q = (query || "").trim();
+  if (!q) return "";
+
+  if (tavilyKey) {
+    try {
+      const r = await fetch("https://api.tavily.com/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: tavilyKey,
+          query: q,
+          search_depth: "basic",
+          max_results: 5,
+          include_answer: true,
+        }),
+      });
+      if (r.ok) {
+        const j = await r.json();
+        const parts = [];
+        if (j.answer) parts.push(`Summary: ${j.answer}`);
+        (j.results || []).slice(0, 5).forEach((item, i) => {
+          parts.push(`${i + 1}. ${item.title || "Result"}\n${item.content || ""}\n${item.url || ""}`.trim());
+        });
+        if (parts.length) return parts.join("\n\n");
+      }
+    } catch (_) {}
+  }
+
+  try {
+    const r = await fetch(
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`
+    );
+    if (r.ok) {
+      const j = await r.json();
+      const parts = [];
+      if (j.AbstractText) parts.push(j.AbstractText);
+      (j.RelatedTopics || []).slice(0, 4).forEach((t) => {
+        if (t.Text) parts.push(t.Text);
+        else if (Array.isArray(t.Topics)) {
+          t.Topics.slice(0, 2).forEach((x) => { if (x.Text) parts.push(x.Text); });
+        }
+      });
+      if (parts.length) return parts.join("\n");
+    }
+  } catch (_) {}
+
+  return "";
+}
+
+function buildEmailSystemPrompt(context, webResults) {
+  let sys = `You are an expert clinical message writer for EverydayMeds, a UK online GLP-1 weight loss pharmacy (Mounjaro, Wegovy, etc.).
+
+You work like ChatGPT for a skilled prescriber: understand their INTENT, follow multi-turn refinements, and use attachments when provided.
+
+PRIMARY RULE — FOLLOW THE PRESCRIBER:
+- Their instructions are your main task. Address EXACTLY what they ask.
+- Do NOT invent unrelated topics (thyroid cancer, eating disorders, SCR flags, etc.) unless they mention them or the order context explicitly shows them.
+- If the scenario mentions treatment gap, last injection, last order date, or another provider — focus on that.
+
+ANTI-HALLUCINATION (CRITICAL):
+- Use ONLY facts present in the order context, consultation answers, attachments, or web search results below.
+- Do NOT invent dates, medication names, doses, order numbers, side effects, diagnoses, or patient statements.
+- If a detail is missing (e.g. last injection date unknown), ask the patient — do not guess or assume.
+- Do NOT claim you reviewed SCR, documents, or chat unless that information appears in the context or attachments.
+- If consultation answers conflict with prescriber notes, follow the prescriber's instructions but do not fabricate reconciliation.
+- When uncertain, use neutral wording ("could you confirm…") rather than stating unverified facts.
+
+REFINEMENT (multi-turn):
+- When the prescriber sends follow-up notes ("make it shorter", "add order on hold", "mention February order"), revise the previous draft.
+- Keep what still works; change only what they ask.
+- Return the FULL revised patient message only — no commentary, no "Here is the revised version".
+
+ATTACHMENTS (images/files):
+- Screenshots may show SCR, chat, consultation answers, videos, or documents — extract relevant facts and use them in the message.
+- Do not say "I analysed your screenshot" — weave findings naturally.
+- If an attachment is unreadable or empty, say you need clearer information — do not invent its contents.
+
+CLINICAL REASONING (when relevant):
+- Each pen order ≈ 4 weeks of weekly injections.
+- If last EverydayMeds order was months ago but they claim a recent injection, supply would not cover the gap — ask about another provider.
+- Ask for date/strength of last injection when timelines don't match.
+- Do not approve or reject prescriptions — request info or explain next steps only.
+
+Message format:
+- Patient encrypted chat thread (not external email — no Subject line).
+- Start with "Dear {first name}," using the patient's first name from context.
+- Professional, warm, British English.
+- Mention order on hold when appropriate.
+- No phone numbers or MedExpress branding.
+- End with exactly:
+Kind regards,
+EveryDayMeds Clinical Team
+
+Order context:
+${context || "No additional order context available."}`;
+
+  if (webResults) {
+    sys += `\n\nWeb search results (use for factual UK clinical/pharmacy context when relevant — do not invent facts not supported here):\n${webResults}`;
+  }
+  return sys;
+}
+
+function buildUserMessageContent(userMessage, attachments, isRefine) {
+  const intro = isRefine
+    ? "Revise the patient message based on this instruction:"
+    : "Draft the patient message. Follow the prescriber's instructions closely — do not add unrelated clinical questions.\n\nPrescriber instructions:";
+  let text = `${intro}\n${userMessage || "(see attachments)"}`;
+
+  const parts = [];
+  for (const att of attachments || []) {
+    if (att.kind === "image" && att.dataUrl) {
+      parts.push({ type: "image_url", image_url: { url: att.dataUrl, detail: "high" } });
+    } else if (att.kind === "text" && att.text) {
+      text += `\n\n[Attached file: ${att.name}]\n${att.text}`;
+    }
+  }
+  parts.unshift({ type: "text", text });
+  return parts.length === 1 ? text : parts;
 }
 
 async function callOpenAiEmail(messages, openaiKey) {
@@ -248,8 +370,8 @@ async function callOpenAiEmail(messages, openaiKey) {
     body: JSON.stringify({
       model: "gpt-4o",
       messages,
-      max_tokens: 900,
-      temperature: 0.35,
+      max_tokens: 1600,
+      temperature: 0.25,
     }),
   });
   if (!r.ok) {
@@ -279,54 +401,41 @@ async function callServerEmail(messages, serverUrl) {
   return text;
 }
 
-async function generatePatientEmail(scenario, context) {
-  const prompt = (scenario || "").trim();
-  if (!prompt) throw new Error("Describe the scenario first.");
+async function generatePatientEmail(payload) {
+  const userMessage = (payload?.userMessage || payload?.scenario || "").trim();
+  const history = Array.isArray(payload?.history) ? payload.history : [];
+  const attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
+  const webSearch = !!payload?.webSearch;
+  const context = payload?.context || "";
 
-  const { serverUrl, openaiKey } = await getAiSettingsFromStorage();
+  if (!userMessage && !attachments.length) {
+    throw new Error("Describe the scenario or attach a file first.");
+  }
+
+  const { serverUrl, openaiKey, tavilyKey } = await getAiSettingsFromStorage();
   if (!openaiKey && !serverUrl) {
     throw new Error("Add your OpenAI API key in extension Settings → Save, then try again.");
   }
 
-  const sys = `You are an expert clinical message writer for EverydayMeds, a UK online GLP-1 weight loss pharmacy (Mounjaro, Wegovy, etc.).
+  let webResults = "";
+  if (webSearch && userMessage) {
+    webResults = await searchWebForAi(userMessage, tavilyKey);
+  }
 
-You write patient chat messages the way ChatGPT would for a skilled prescriber: you understand their INTENT from their scenario note, not random checklist items.
+  const isRefine = history.length > 0;
+  const sys = buildEmailSystemPrompt(context, webResults);
+  const messages = [{ role: "system", content: sys }];
 
-PRIMARY RULE — FOLLOW THE PRESCRIBER'S SCENARIO:
-- The prescriber's scenario description is your main instruction. Address EXACTLY what they are asking about.
-- Do NOT invent unrelated topics (thyroid cancer, eating disorders, SCR conditions, etc.) unless the prescriber explicitly mentions them.
-- Do NOT dump generic consultation or contraindication questions into the message.
-- If the scenario mentions a treatment gap, last injection date, last order date, or another provider — that is the focus of the message.
+  for (const turn of history.slice(-12)) {
+    if (turn?.role === "user" || turn?.role === "assistant") {
+      messages.push({ role: turn.role, content: turn.content });
+    }
+  }
 
-CLINICAL REASONING (when relevant to the scenario):
-- Each pen order typically covers ~4 weeks of weekly injections.
-- If the patient's last order with EverydayMeds was months ago (e.g. February) but they say their last injection was recent (e.g. June/July), the supply from that old order would not last until now — politely explain this and ask whether they received medication from another provider during the gap.
-- Ask for: date of last injection, strength/dose, and whether treatment came from another provider — when the scenario implies a supply/timeline mismatch.
-- If there has been a long gap, mention the order may need dose adjustment after clinical review — do not approve or reject the prescription in the message.
-- Use the order context below for dates, order numbers, and declared answers — weave in specific facts (e.g. "your last order with us was in February 2026") when available.
-
-Message format:
-- Write for the patient's encrypted chat thread (not external email — no Subject line).
-- Start with "Dear {first name}," using the patient's first name from context.
-- Professional, warm, British English — UK online pharmacy tone.
-- Be specific about what you need from the patient.
-- Mention the order is on hold while awaiting a response when appropriate.
-- Do NOT include phone numbers or MedExpress branding.
-- End with exactly:
-Kind regards,
-EveryDayMeds Clinical Team
-- Keep focused and concise unless the scenario needs more detail.
-
-Order context:
-${context || "No additional order context available."}`;
-
-  const messages = [
-    { role: "system", content: sys },
-    {
-      role: "user",
-      content: `Draft the patient message. Follow the prescriber's scenario closely — do not add unrelated clinical questions.\n\nPrescriber scenario:\n${prompt}`,
-    },
-  ];
+  messages.push({
+    role: "user",
+    content: buildUserMessageContent(userMessage, attachments, isRefine),
+  });
 
   if (openaiKey) {
     try {
@@ -341,14 +450,15 @@ ${context || "No additional order context available."}`;
   }
 
   try {
-    return stripEmailSubject(await callServerEmail(messages, serverUrl));
+    const plainMessages = messages.map((m) => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+    }));
+    return stripEmailSubject(await callServerEmail(plainMessages, serverUrl));
   } catch (e) {
     const msg = e?.message || "Server request failed.";
     if (/404/.test(msg)) {
       throw new Error("Server URL is not available. Add your OpenAI API key in Settings → Save.");
-    }
-    if (/failed to fetch|networkerror/i.test(msg)) {
-      throw new Error("Network error — add your OpenAI API key in Settings → Save.");
     }
     throw new Error(msg);
   }
@@ -399,7 +509,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === "GENERATE_PATIENT_EMAIL") {
-    generatePatientEmail(message.scenario, message.context)
+    generatePatientEmail(message)
       .then((text) => sendResponse({ success: true, text }))
       .catch((e) => sendResponse({ success: false, error: e?.message || "Generation failed" }));
     return true;
