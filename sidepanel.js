@@ -764,7 +764,10 @@ function currentPatientName() {
 }
 function substituteEmail(text) {
   const name = currentPatientName();
-  return (text || "").replace(/\{\{?\s*patient_name\s*\}?\}/gi, name);
+  return (text || "")
+    .replace(/@patientname\b/gi, name)
+    .replace(/@patient_name\b/gi, name)
+    .replace(/\{\{?\s*patient_name\s*\}?\}/gi, name);
 }
 async function renderEmailMacros() {
   const chips = document.getElementById("email-macros");

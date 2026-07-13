@@ -4268,15 +4268,95 @@ async function loadMacrosFromJson() {
   }
 }
 
+async function loadUserMacroTemplatesFromStorage() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.sync.get(["user_macro_templates"], (r) => {
+        const list = r && r.user_macro_templates;
+        resolve(Array.isArray(list) ? list.filter((t) => t && t.title && t.body) : []);
+      });
+    } catch (_) { resolve([]); }
+  });
+}
+
+function saveUserMacroTemplatesToStorage(templates) {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.sync.set({ user_macro_templates: templates }, () => resolve());
+    } catch (_) { resolve(); }
+  });
+}
+
+function maxMacroNumInCategories(categories) {
+  let max = 0;
+  for (const c of categories || []) {
+    for (const m of c.macros || []) {
+      const n = parseInt(m.num, 10);
+      if (!Number.isNaN(n) && n > max) max = n;
+    }
+  }
+  return max;
+}
+
+function maxUserTemplateNum(templates) {
+  let max = 0;
+  for (const t of templates || []) {
+    const n = parseInt(t.num, 10);
+    if (!Number.isNaN(n) && n > max) max = n;
+  }
+  return max;
+}
+
+function getNextTemplateNum(baseCategories, userTemplates) {
+  return Math.max(maxMacroNumInCategories(baseCategories), maxUserTemplateNum(userTemplates), 0) + 1;
+}
+
+async function ensureUserTemplateNums(baseCategories, templates) {
+  if (!templates.length) return templates;
+  const missing = templates.filter((t) => t.num == null || t.num === "");
+  if (!missing.length) return templates;
+  let max = Math.max(maxMacroNumInCategories(baseCategories), maxUserTemplateNum(templates));
+  const byCreated = missing.slice().sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+  const numById = new Map();
+  for (const t of byCreated) {
+    max += 1;
+    numById.set(t.id, max);
+  }
+  const updated = templates.map((t) => (numById.has(t.id) ? { ...t, num: numById.get(t.id) } : t));
+  await saveUserMacroTemplatesToStorage(updated);
+  return updated;
+}
+
+async function mergeUserTemplatesIntoCategories(base) {
+  const cats = Array.isArray(base) ? base.slice() : [];
+  let userTemplates = await loadUserMacroTemplatesFromStorage();
+  userTemplates = await ensureUserTemplateNums(cats, userTemplates);
+  if (!userTemplates.length) return cats;
+  cats.push({
+    id: "my-templates",
+    label: "My Templates",
+    icon: "⭐",
+    macros: userTemplates.map((t) => ({
+      num: t.num,
+      name: t.title,
+      tag: "Mine",
+      desc: "Your saved template",
+      body: t.body,
+      userTemplateId: t.id,
+    })),
+  });
+  return cats;
+}
+
 async function getMacroCategoriesForPopout() {
   const live = await loadMacrosFromJson();
-  if (live && live.length) return live;
-  return getBuiltinMacroCategories();
+  const base = (live && live.length) ? live : getBuiltinMacroCategories();
+  return mergeUserTemplatesIntoCategories(base);
 }
 
 function injectMacroModal() {
   if (document.getElementById("mg-macro-backdrop") && document.getElementById("mg-macro-panel")) return;
-  ["mg-macro-styles", "mg-macro-tab", "mg-macro-backdrop", "mg-macro-panel"].forEach(id => {
+  ["mg-macro-styles", "mg-macro-tab", "mg-macro-backdrop", "mg-macro-panel", "mg-template-modal-backdrop"].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.parentNode) el.parentNode.removeChild(el);
   });
@@ -4382,8 +4462,111 @@ function injectMacroModal() {
     #mg-macro-search:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,0.18); }
 
     #mg-macro-cat-nav {
-      padding: 8px; border-bottom: 1px solid #1e293b;
-      max-height: 200px; overflow-y: auto;
+      padding: 4px 8px 8px; overflow-y: auto; max-height: 220px;
+    }
+    #mg-macro-cat-nav-wrap[hidden] { display: none !important; }
+    .mg-mac-cat-dropdown {
+      border-bottom: 1px solid #1e293b; flex-shrink: 0;
+    }
+    #mg-macro-cat-toggle {
+      display: flex; align-items: center; gap: 8px; width: 100%;
+      padding: 10px 12px; border: none; background: transparent;
+      color: #94a3b8; font: 600 12px/1.3 inherit; cursor: pointer;
+      text-align: left; transition: background 0.12s, color 0.12s;
+    }
+    #mg-macro-cat-toggle:hover { background: #1e293b; color: #e2e8f0; }
+    #mg-macro-cat-toggle .mg-mac-cat-chev {
+      margin-left: auto; width: 14px; height: 14px;
+      transition: transform 0.15s ease;
+    }
+    #mg-macro-cat-toggle[aria-expanded="true"] .mg-mac-cat-chev {
+      transform: rotate(180deg);
+    }
+    #mg-macro-cat-active-label {
+      flex: 1; color: #c4b5fd; font-size: 11px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #mg-macro-sidebar-pinned {
+      padding: 8px 12px 6px; border-bottom: 1px solid #1e293b; flex-shrink: 0;
+    }
+    #mg-macro-custom-btn {
+      display: block; width: 100%; text-align: left;
+      margin-bottom: 8px;
+    }
+    #mg-macro-add-template-btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      width: 100%; padding: 9px 12px; border-radius: 8px;
+      border: 1px dashed rgba(139,92,246,0.45);
+      background: rgba(139,92,246,0.08); color: #c4b5fd;
+      font: 700 12px/1 inherit; cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    #mg-macro-add-template-btn:hover {
+      background: rgba(139,92,246,0.16); border-color: rgba(139,92,246,0.65);
+    }
+    #mg-template-modal-backdrop {
+      position: fixed !important; inset: 0 !important;
+      background: rgba(2, 6, 23, 0.72) !important;
+      backdrop-filter: blur(4px) !important;
+      z-index: 2147483001 !important;
+      display: grid; place-items: center;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s ease !important;
+    }
+    #mg-template-modal-backdrop.open { opacity: 1; pointer-events: auto; }
+    #mg-template-modal {
+      width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+      overflow-y: auto; background: #0f172a; color: #e2e8f0;
+      border: 1px solid #334155; border-radius: 14px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+      padding: 20px 22px 18px;
+    }
+    #mg-template-modal h3 {
+      margin: 0 0 10px; font-size: 17px; font-weight: 800; color: #f8fafc;
+    }
+    .mg-template-guide {
+      font-size: 12px; line-height: 1.55; color: #94a3b8;
+      background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.25);
+      border-radius: 10px; padding: 10px 12px; margin-bottom: 14px;
+    }
+    .mg-template-guide code {
+      background: #1e293b; color: #c4b5fd; padding: 1px 5px; border-radius: 4px;
+      font-size: 11px;
+    }
+    #mg-template-modal label {
+      display: block; font-size: 11px; font-weight: 700;
+      letter-spacing: 0.04em; text-transform: uppercase;
+      color: #a78bfa; margin: 10px 0 6px;
+    }
+    #mg-template-title, #mg-template-body {
+      width: 100%; box-sizing: border-box;
+      padding: 10px 12px; border-radius: 10px;
+      border: 1px solid #334155; background: #0b1220;
+      color: #e2e8f0; font-size: 13px; font-family: inherit;
+      outline: none;
+    }
+    #mg-template-body {
+      min-height: 180px; resize: vertical; line-height: 1.55;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    #mg-template-title:focus, #mg-template-body:focus {
+      border-color: #8b5cf6; box-shadow: 0 0 0 2px rgba(139,92,246,0.22);
+    }
+    .mg-template-modal-actions {
+      display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;
+    }
+    .mg-template-modal-actions button {
+      padding: 9px 16px; border-radius: 9px; font: 700 12px/1 inherit;
+      cursor: pointer; border: none;
+    }
+    #mg-template-cancel {
+      background: #1e293b; color: #94a3b8; border: 1px solid #334155;
+    }
+    #mg-template-save {
+      background: linear-gradient(90deg, #8b5cf6, #7c3aed); color: #fff;
+    }
+    #mg-template-modal-error {
+      color: #f87171; font-size: 12px; margin-top: 8px; min-height: 16px;
     }
     #mg-macro-cat-nav .mg-mac-cat-item {
       display: flex; align-items: center; gap: 8px;
@@ -4639,6 +4822,14 @@ function injectMacroModal() {
     .mg-mac-btn.secondary {
       background: #1e293b; color: #cbd5e1; border: 1px solid #334155; box-shadow: none;
     }
+    .mg-mac-btn.danger {
+      background: #450a0a; color: #fecaca; border: 1px solid #991b1b; box-shadow: none;
+      flex: 0 0 auto !important; min-width: 88px;
+    }
+    .mg-mac-btn.danger:hover {
+      background: #7f1d1d; box-shadow: none;
+    }
+    #mg-macro-edit-template[hidden], #mg-macro-delete-template[hidden] { display: none !important; }
     .mg-mac-btn.secondary:hover { background: #283548; color: #fff; }
     .mg-mac-btn.chat-btn {
       background: linear-gradient(180deg, #3b82f6, #2563eb);
@@ -4783,7 +4974,23 @@ function injectMacroModal() {
         <div id="mg-macro-search-wrap">
           <input id="mg-macro-search" type="search" placeholder="Search macros…" autocomplete="off" />
         </div>
-        <nav id="mg-macro-cat-nav" aria-label="Macro categories"></nav>
+        <div id="mg-macro-sidebar-pinned">
+          <button type="button" id="mg-macro-custom-btn" class="mg-mac-list-item custom-item">
+            <div class="mg-mac-list-item-name">✏️ Custom message</div>
+            <div class="mg-mac-list-item-meta">Write your own email from scratch</div>
+          </button>
+          <button type="button" id="mg-macro-add-template-btn">+ Add template</button>
+        </div>
+        <div class="mg-mac-cat-dropdown">
+          <button type="button" id="mg-macro-cat-toggle" aria-expanded="false">
+            <span>📂 Categories</span>
+            <span id="mg-macro-cat-active-label">All categories</span>
+            <svg class="mg-mac-cat-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div id="mg-macro-cat-nav-wrap" hidden>
+            <nav id="mg-macro-cat-nav" aria-label="Macro categories"></nav>
+          </div>
+        </div>
         <div id="mg-macro-list" role="listbox" aria-label="Macros"></div>
       </aside>
       <section id="mg-macro-detail">
@@ -4803,6 +5010,8 @@ function injectMacroModal() {
             </div>
             <textarea id="mg-macro-detail-preview" spellcheck="true" aria-label="Macro body — editable"></textarea>
             <div id="mg-macro-detail-actions">
+              <button type="button" class="mg-mac-btn secondary" id="mg-macro-edit-template" hidden>Edit template</button>
+              <button type="button" class="mg-mac-btn danger" id="mg-macro-delete-template" hidden>Delete</button>
               <button type="button" class="mg-mac-btn" id="mg-macro-copy-btn">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>
                 <span id="mg-macro-copy-label">Copy</span>
@@ -4829,12 +5038,12 @@ function injectMacroModal() {
               <button type="button" class="mg-mac-btn ai-btn" id="mg-macro-ai-generate">✨ Generate</button>
               <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-new-chat" title="Start a new conversation">New chat</button>
               <label class="mg-ai-web-toggle" title="Search the web for factual context (Tavily key in Settings for best results)">
-                <input type="checkbox" id="mg-macro-ai-web-search" /> Web search
+                <input type="checkbox" id="mg-macro-ai-web-search" checked /> Web search
               </label>
               <span id="mg-macro-ai-status">Add your OpenAI API key in Settings → Save</span>
             </div>
-            <label for="mg-macro-ai-result" id="mg-macro-ai-result-label" hidden>Current draft</label>
-            <textarea id="mg-macro-ai-result" rows="10" readonly spellcheck="true" aria-label="AI generated message" hidden></textarea>
+            <label for="mg-macro-ai-result" id="mg-macro-ai-result-label" hidden>Current draft — edit before sending</label>
+            <textarea id="mg-macro-ai-result" rows="10" spellcheck="true" aria-label="AI generated message — editable" hidden></textarea>
             <div id="mg-macro-ai-result-actions" hidden>
               <button type="button" class="mg-mac-btn" id="mg-macro-ai-use-editor">Use in editor</button>
               <button type="button" class="mg-mac-btn chat-btn" id="mg-macro-ai-insert-chat">Insert into chat</button>
@@ -4849,7 +5058,45 @@ function injectMacroModal() {
   document.body.appendChild(backdrop);
   document.body.appendChild(panel);
 
+  const templateModalBackdrop = document.createElement("div");
+  templateModalBackdrop.id = "mg-template-modal-backdrop";
+  templateModalBackdrop.setAttribute("aria-hidden", "true");
+  templateModalBackdrop.innerHTML = `
+    <div id="mg-template-modal" role="dialog" aria-modal="true" aria-labelledby="mg-template-modal-title">
+      <h3 id="mg-template-modal-title">Add email template</h3>
+      <div class="mg-template-guide">
+        <strong>Personalisation</strong> — use <code>@patientname</code> or <code>{patient_name}</code> anywhere in your text.
+        It will be replaced with the patient's first name when you copy or insert (e.g. <code>Hello @patientname</code> → <code>Hello Amy</code>).
+        <br><br>
+        Templates are saved permanently to your account and sync across sessions.
+      </div>
+      <label for="mg-template-title">Template title</label>
+      <input type="text" id="mg-template-title" placeholder="e.g. Mounjaro — first dose counselling" maxlength="120" />
+      <label for="mg-template-body">Email text</label>
+      <textarea id="mg-template-body" rows="12" placeholder="Hello @patientname,&#10;&#10;Your order has been approved…&#10;&#10;Kind regards,&#10;EveryDayMeds Clinical Team"></textarea>
+      <div id="mg-template-modal-error"></div>
+      <div class="mg-template-modal-actions">
+        <button type="button" id="mg-template-cancel">Cancel</button>
+        <button type="button" id="mg-template-save">Save template</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(templateModalBackdrop);
+
   const catNavEl = panel.querySelector("#mg-macro-cat-nav");
+  const catNavWrap = panel.querySelector("#mg-macro-cat-nav-wrap");
+  const catToggle = panel.querySelector("#mg-macro-cat-toggle");
+  const catActiveLabel = panel.querySelector("#mg-macro-cat-active-label");
+  const customBtn = panel.querySelector("#mg-macro-custom-btn");
+  const addTemplateBtn = panel.querySelector("#mg-macro-add-template-btn");
+  const templateTitleInput = templateModalBackdrop.querySelector("#mg-template-title");
+  const templateBodyInput = templateModalBackdrop.querySelector("#mg-template-body");
+  const templateSaveBtn = templateModalBackdrop.querySelector("#mg-template-save");
+  const templateCancelBtn = templateModalBackdrop.querySelector("#mg-template-cancel");
+  const templateErrorEl = templateModalBackdrop.querySelector("#mg-template-modal-error");
+  const templateModalTitle = templateModalBackdrop.querySelector("#mg-template-modal-title");
+  const editTemplateBtn = panel.querySelector("#mg-macro-edit-template");
+  const deleteTemplateBtn = panel.querySelector("#mg-macro-delete-template");
   const listEl = panel.querySelector("#mg-macro-list");
   const searchEl = panel.querySelector("#mg-macro-search");
   const closeBtn = panel.querySelector("#mg-macro-close");
@@ -4902,7 +5149,7 @@ function injectMacroModal() {
     aiDraft: "",
     aiPromptText: "",
     customPreview: "",
-    webSearch: false,
+    webSearch: true,
   };
 
   function currentMacroSessionKey() {
@@ -4936,7 +5183,7 @@ function injectMacroModal() {
     customDetailMode = macroSessionCache.customDetailMode || "write";
     aiChatHistory = macroSessionCache.aiChatHistory.slice();
     if (aiPrompt) aiPrompt.value = macroSessionCache.aiPromptText || "";
-    if (aiWebSearch) aiWebSearch.checked = macroSessionCache.webSearch;
+    if (aiWebSearch) aiWebSearch.checked = macroSessionCache.webSearch !== false;
     if (macroSessionCache.customPreview && detailPreview) {
       detailPreview.value = macroSessionCache.customPreview;
       detailPreview.dataset.macroKey = CUSTOM_MACRO_KEY;
@@ -4953,18 +5200,24 @@ function injectMacroModal() {
 
   async function refreshAiStatusHint() {
     if (!aiStatus || selectedKey !== CUSTOM_MACRO_KEY || customDetailMode !== "ai") return;
-    const { openaiKey } = await getAiSettings();
-    if (openaiKey) {
+    const { openaiKey, tavilyKey } = await getAiSettings();
+    if (openaiKey && tavilyKey) {
+      setAiStatus(aiChatHistory.length
+        ? "Press Enter or Refine — web search enabled for UK clinical facts."
+        : "OpenAI + Tavily ready — searches NHS/NICE/SmPC sources automatically.");
+    } else if (openaiKey) {
       setAiStatus(aiChatHistory.length
         ? "Press Enter or Refine to improve the draft."
-        : "OpenAI ready — attach screenshots, enable web search, press Enter.");
+        : "OpenAI ready — add Tavily API key in Settings for best web search.");
     } else {
       setAiStatus("Add your OpenAI API key in Settings → Save.", "error");
     }
   }
 
   let activeCatId = "all";
+  let catNavOpen = false;
   let selectedKey = null;
+  let editingTemplateId = null;
   let categories = [];
   let commsMode = false;
   let chatOriginalParent = null;
@@ -4989,33 +5242,132 @@ function injectMacroModal() {
     };
   }
 
-  function customMatchesSearch(q) {
-    if (!q) return true;
-    const hay = "custom message write your own email from scratch blank";
-    return hay.includes(q);
+  function updateCustomBtnActive() {
+    if (!customBtn) return;
+    customBtn.classList.toggle("active", selectedKey === CUSTOM_MACRO_KEY);
   }
 
-  function appendCustomListItem(q) {
-    if (!customMatchesSearch(q)) return false;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "mg-mac-list-item custom-item" + (selectedKey === CUSTOM_MACRO_KEY ? " active" : "");
-    btn.setAttribute("role", "option");
-    btn.innerHTML = `
-      <div class="mg-mac-list-item-name">✏️ Custom message</div>
-      <div class="mg-mac-list-item-meta">Write your own email from scratch</div>
-    `;
-    btn.addEventListener("click", () => {
-      selectedKey = CUSTOM_MACRO_KEY;
-      renderList();
-      renderDetail();
-      detailPreview.focus();
-    });
-    listEl.appendChild(btn);
-    return true;
+  function updateCatToggleLabel() {
+    if (!catActiveLabel) return;
+    if (activeCatId === "all") {
+      catActiveLabel.textContent = "All categories";
+      return;
+    }
+    const cat = categories.find((c) => c.id === activeCatId);
+    catActiveLabel.textContent = cat ? cat.label : "All categories";
+  }
+
+  function setCatNavOpen(open) {
+    catNavOpen = !!open;
+    if (catNavWrap) catNavWrap.hidden = !catNavOpen;
+    if (catToggle) catToggle.setAttribute("aria-expanded", catNavOpen ? "true" : "false");
+  }
+
+  function getUserTemplateIdFromKey(key) {
+    if (!key || !String(key).startsWith("user::")) return null;
+    return String(key).slice(6);
+  }
+
+  async function openTemplateModal(templateId = null) {
+    editingTemplateId = templateId || null;
+    if (templateErrorEl) templateErrorEl.textContent = "";
+    if (templateId) {
+      const templates = await loadUserMacroTemplatesFromStorage();
+      const tpl = templates.find((t) => t.id === templateId);
+      if (!tpl) {
+        editingTemplateId = null;
+        return;
+      }
+      if (templateModalTitle) templateModalTitle.textContent = "Edit email template";
+      if (templateSaveBtn) templateSaveBtn.textContent = "Save changes";
+      if (templateTitleInput) templateTitleInput.value = tpl.title;
+      if (templateBodyInput) templateBodyInput.value = tpl.body;
+    } else {
+      if (templateModalTitle) templateModalTitle.textContent = "Add email template";
+      if (templateSaveBtn) templateSaveBtn.textContent = "Save template";
+      if (templateTitleInput) templateTitleInput.value = "";
+      if (templateBodyInput) {
+        templateBodyInput.value = "Hello @patientname,\n\n\n\nKind regards,\nEveryDayMeds Clinical Team";
+      }
+    }
+    templateModalBackdrop.classList.add("open");
+    templateModalBackdrop.setAttribute("aria-hidden", "false");
+    setTimeout(() => templateTitleInput?.focus(), 80);
+  }
+
+  function closeTemplateModal() {
+    editingTemplateId = null;
+    templateModalBackdrop.classList.remove("open");
+    templateModalBackdrop.setAttribute("aria-hidden", "true");
+  }
+
+  async function saveUserTemplate() {
+    const title = (templateTitleInput?.value || "").trim();
+    const body = (templateBodyInput?.value || "").trim();
+    if (!title) {
+      if (templateErrorEl) templateErrorEl.textContent = "Enter a template title.";
+      templateTitleInput?.focus();
+      return;
+    }
+    if (!body) {
+      if (templateErrorEl) templateErrorEl.textContent = "Enter the email text.";
+      templateBodyInput?.focus();
+      return;
+    }
+    const templates = await loadUserMacroTemplatesFromStorage();
+    let savedId = editingTemplateId;
+
+    if (editingTemplateId) {
+      const idx = templates.findIndex((t) => t.id === editingTemplateId);
+      if (idx < 0) {
+        if (templateErrorEl) templateErrorEl.textContent = "Template not found — it may have been deleted.";
+        return;
+      }
+      templates[idx] = {
+        ...templates[idx],
+        title,
+        body,
+        updatedAt: new Date().toISOString(),
+      };
+    } else {
+      const baseCats = (await loadMacrosFromJson()) || getBuiltinMacroCategories();
+      const nextNum = getNextTemplateNum(baseCats, templates);
+      savedId = String(nextNum);
+      templates.push({
+        id: savedId,
+        num: nextNum,
+        title,
+        body,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    await saveUserMacroTemplatesToStorage(templates);
+    closeTemplateModal();
+    await refreshMacroData();
+    selectedKey = `user::${savedId}`;
+    updateCustomBtnActive();
+    renderList();
+    renderDetail();
+  }
+
+  async function deleteUserTemplate(templateId) {
+    if (!templateId) return;
+    const templates = await loadUserMacroTemplatesFromStorage();
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    if (!confirm(`Delete template "${tpl.title}"?\n\nThis cannot be undone.`)) return;
+    const filtered = templates.filter((t) => t.id !== templateId);
+    await saveUserMacroTemplatesToStorage(filtered);
+    selectedKey = CUSTOM_MACRO_KEY;
+    await refreshMacroData();
+    updateCustomBtnActive();
+    renderList();
+    renderDetail();
   }
 
   function macroKey(catId, m) {
+    if (m && m.userTemplateId) return `user::${m.userTemplateId}`;
     return `${catId}::${m.name}`;
   }
 
@@ -5137,14 +5489,15 @@ function injectMacroModal() {
   function getAiSettings() {
     return new Promise((resolve) => {
       try {
-        chrome.storage.sync.get(["server_url", "openai_key"], (r) => {
+        chrome.storage.sync.get(["server_url", "openai_key", "tavily_api_key"], (r) => {
           resolve({
             serverUrl: (r && r.server_url) ? String(r.server_url).replace(/\/$/, "") : "",
             openaiKey: (r && r.openai_key) ? String(r.openai_key) : "",
+            tavilyKey: (r && r.tavily_api_key) ? String(r.tavily_api_key) : "",
           });
         });
       } catch (_) {
-        resolve({ serverUrl: "", openaiKey: "" });
+        resolve({ serverUrl: "", openaiKey: "", tavilyKey: "" });
       }
     });
   }
@@ -5358,7 +5711,7 @@ function injectMacroModal() {
     });
   }
 
-  function setCustomDetailMode(mode) {
+  function setCustomDetailMode(mode, { focus = false } = {}) {
     customDetailMode = mode === "ai" ? "ai" : "write";
     if (customTabs) {
       customTabs.querySelectorAll(".mg-custom-tab").forEach((btn) => {
@@ -5370,8 +5723,8 @@ function injectMacroModal() {
     if (customDetailMode === "ai") {
       refreshAiStatusHint();
       updateAiGenerateBtnLabel();
-      if (aiPrompt) aiPrompt.focus();
-    } else if (detailPreview) {
+      if (focus && aiPrompt) aiPrompt.focus();
+    } else if (focus && detailPreview) {
       detailPreview.focus();
     }
   }
@@ -5412,7 +5765,7 @@ function injectMacroModal() {
     aiGenerating = true;
     if (aiGenerateBtn) aiGenerateBtn.disabled = true;
     const isRefine = aiChatHistory.length > 0;
-    setAiStatus(isRefine ? "Refining draft…" : (aiWebSearch?.checked ? "Searching & drafting…" : "Generating draft…"));
+    setAiStatus(isRefine ? "Refining draft…" : (aiWebSearch?.checked ? "Searching web & drafting…" : "Generating draft…"));
     try {
       const attachmentsPayload = aiAttachments.map(({ name, mediaType, dataUrl, text, kind }) => ({
         name, mediaType, dataUrl, text, kind,
@@ -5453,8 +5806,7 @@ function injectMacroModal() {
     detailPreview.value = draft;
     detailPreview.dataset.macroKey = CUSTOM_MACRO_KEY;
     macroSessionCache.customPreview = draft;
-    setCustomDetailMode("write");
-    detailPreview.focus();
+    setCustomDetailMode("write", { focus: true });
     try { detailPreview.setSelectionRange(detailPreview.value.length, detailPreview.value.length); } catch (_) {}
   }
 
@@ -5505,6 +5857,8 @@ function injectMacroModal() {
   function fillPlaceholders(text) {
     const name = getPatientName();
     return stripEmailSubject(String(text))
+      .replace(/@patientname\b/gi, name)
+      .replace(/@patient_name\b/gi, name)
       .replace(/\{patient_name\}/gi, name)
       .replace(/\[Patient Name\]/gi, name)
       .replace(/<<\s*Patient Name\s*>>/gi, name);
@@ -5604,6 +5958,9 @@ function injectMacroModal() {
     }
     copyBtn.classList.remove("copied");
     copyLabel.textContent = "Copy";
+    const userTemplateId = m.userTemplateId || getUserTemplateIdFromKey(selectedKey);
+    if (editTemplateBtn) editTemplateBtn.hidden = !userTemplateId;
+    if (deleteTemplateBtn) deleteTemplateBtn.hidden = !userTemplateId;
   }
 
   function renderCatNav() {
@@ -5621,7 +5978,12 @@ function injectMacroModal() {
     allBtn.type = "button";
     allBtn.className = "mg-mac-cat-item" + (activeCatId === "all" ? " active" : "");
     allBtn.innerHTML = `<span>📚</span><span>All categories</span><span class="mg-mac-cat-count">${allCount}</span>`;
-    allBtn.addEventListener("click", () => { activeCatId = "all"; renderCatNav(); renderList(); });
+    allBtn.addEventListener("click", () => {
+      activeCatId = "all";
+      setCatNavOpen(false);
+      renderCatNav();
+      renderList();
+    });
     catNavEl.appendChild(allBtn);
 
     categories.forEach(c => {
@@ -5631,9 +5993,15 @@ function injectMacroModal() {
       b.type = "button";
       b.className = "mg-mac-cat-item" + (c.id === activeCatId ? " active" : "");
       b.innerHTML = `<span>${esc(c.icon || "•")}</span><span>${esc(c.label)}</span><span class="mg-mac-cat-count">${n}</span>`;
-      b.addEventListener("click", () => { activeCatId = c.id; renderCatNav(); renderList(); });
+      b.addEventListener("click", () => {
+        activeCatId = c.id;
+        setCatNavOpen(false);
+        renderCatNav();
+        renderList();
+      });
       catNavEl.appendChild(b);
     });
+    updateCatToggleLabel();
   }
 
   function renderList() {
@@ -5641,23 +6009,24 @@ function injectMacroModal() {
     const q = qRaw.toLowerCase();
     const entries = getFilteredMacros();
     listEl.innerHTML = "";
+    updateCustomBtnActive();
 
-    const customShown = appendCustomListItem(q);
-
-    if (!entries.length && !customShown) {
+    if (!entries.length) {
       const empty = document.createElement("div");
       empty.className = "mg-mac-empty";
       empty.textContent = q ? `No macros match "${qRaw}".` : "No macros in this category.";
       listEl.appendChild(empty);
-      selectedKey = null;
+      const entryKeys = [];
+      if (!selectedKey || (selectedKey !== CUSTOM_MACRO_KEY && !entryKeys.includes(selectedKey))) {
+        if (selectedKey !== CUSTOM_MACRO_KEY) selectedKey = CUSTOM_MACRO_KEY;
+      }
       renderDetail();
       return;
     }
 
-    const customValid = customShown && customMatchesSearch(q);
     const entryKeys = entries.map(e => e.key);
     if (!selectedKey || (selectedKey !== CUSTOM_MACRO_KEY && !entryKeys.includes(selectedKey))) {
-      selectedKey = customValid ? CUSTOM_MACRO_KEY : entryKeys[0];
+      selectedKey = entryKeys[0];
     }
 
     let lastCat = null;
@@ -5831,6 +6200,7 @@ function injectMacroModal() {
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
+    setCatNavOpen(false);
     setTimeout(() => searchEl.focus(), 80);
   }
 
@@ -5857,6 +6227,39 @@ function injectMacroModal() {
   });
   backdrop.addEventListener("click", closePanel);
   closeBtn.addEventListener("click", closePanel);
+  if (customBtn) {
+    customBtn.addEventListener("click", () => {
+      selectedKey = CUSTOM_MACRO_KEY;
+      updateCustomBtnActive();
+      renderList();
+      renderDetail();
+      if (detailPreview) detailPreview.focus();
+    });
+  }
+  if (addTemplateBtn) addTemplateBtn.addEventListener("click", () => openTemplateModal());
+  if (editTemplateBtn) {
+    editTemplateBtn.addEventListener("click", () => {
+      const id = getUserTemplateIdFromKey(selectedKey);
+      if (id) openTemplateModal(id);
+    });
+  }
+  if (deleteTemplateBtn) {
+    deleteTemplateBtn.addEventListener("click", () => {
+      const id = getUserTemplateIdFromKey(selectedKey);
+      if (id) deleteUserTemplate(id);
+    });
+  }
+  if (catToggle) {
+    catToggle.addEventListener("click", () => setCatNavOpen(!catNavOpen));
+  }
+  if (templateSaveBtn) templateSaveBtn.addEventListener("click", saveUserTemplate);
+  if (templateCancelBtn) templateCancelBtn.addEventListener("click", closeTemplateModal);
+  templateModalBackdrop.addEventListener("click", (e) => {
+    if (e.target === templateModalBackdrop) closeTemplateModal();
+  });
+  templateModalBackdrop.querySelector("#mg-template-modal")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+  });
   copyBtn.addEventListener("click", copySelected);
   insertBtn.addEventListener("click", insertIntoChat);
   if (aiGenerateBtn) aiGenerateBtn.addEventListener("click", runAiGenerate);
@@ -5869,11 +6272,17 @@ function injectMacroModal() {
   }
   if (customTabs) {
     customTabs.querySelectorAll(".mg-custom-tab").forEach((btn) => {
-      btn.addEventListener("click", () => setCustomDetailMode(btn.dataset.mode));
+      btn.addEventListener("click", () => setCustomDetailMode(btn.dataset.mode, { focus: true }));
     });
   }
   if (aiUseEditorBtn) aiUseEditorBtn.addEventListener("click", useAiDraftInEditor);
   if (aiInsertChatBtn) aiInsertChatBtn.addEventListener("click", insertAiDraftIntoChat);
+  if (aiResult) {
+    aiResult.addEventListener("input", () => {
+      macroSessionCache.aiDraft = aiResult.value;
+      saveMacroModalSession();
+    });
+  }
   if (aiCopyResultBtn) {
     aiCopyResultBtn.addEventListener("click", async () => {
       const text = String(aiResult?.value || "").trim();
@@ -5938,14 +6347,30 @@ function injectMacroModal() {
     });
   }
   updateAiGenerateBtnLabel();
-  searchEl.addEventListener("input", () => { renderCatNav(); renderList(); });
+  searchEl.addEventListener("input", () => {
+    const keepSearchFocus = document.activeElement === searchEl;
+    renderCatNav();
+    renderList();
+    if (keepSearchFocus) {
+      try {
+        searchEl.focus({ preventScroll: true });
+        searchEl.setSelectionRange(searchEl.value.length, searchEl.value.length);
+      } catch (_) {}
+    }
+  });
 
   const _keydownHandler = (e) => {
+    if (e.key === "Escape") {
+      if (templateModalBackdrop.classList.contains("open")) {
+        closeTemplateModal();
+        return;
+      }
+      if (panel.classList.contains("open")) closePanel();
+    }
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "m") {
       e.preventDefault();
       panel.classList.contains("open") ? closePanel() : openMacrosOnlyModal();
     }
-    if (e.key === "Escape" && panel.classList.contains("open")) closePanel();
   };
   window.addEventListener("keydown", _keydownHandler);
   window.__mgMacroKeydown = _keydownHandler;
@@ -5956,6 +6381,9 @@ function injectMacroModal() {
     try {
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === "local" && changes.email_macros && document.getElementById("mg-macro-panel")) {
+          try { refreshMacroData(); } catch (_) {}
+        }
+        if (area === "sync" && changes.user_macro_templates && document.getElementById("mg-macro-panel")) {
           try { refreshMacroData(); } catch (_) {}
         }
         if (area === "sync" && (changes.openai_key || changes.server_url || changes.tavily_api_key)) {

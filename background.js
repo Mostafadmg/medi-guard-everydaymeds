@@ -239,7 +239,69 @@ function getAiSettingsFromStorage() {
   });
 }
 
-async function searchWebForAi(query, tavilyKey) {
+function buildWebSearchQueries(context, userMessage) {
+  const msg = (userMessage || "").trim();
+  const ctx = context || "";
+  const combined = `${msg}\n${ctx}`.toLowerCase();
+  const queries = [];
+
+  if (msg.length >= 6) {
+    queries.push(`${msg} UK clinical pharmacy`.slice(0, 260));
+  }
+
+  const medLine = ctx.match(/^Medication ordered: (.+)$/m);
+  const med = medLine ? medLine[1].trim() : "";
+  if (med && msg) {
+    queries.push(`${med} UK SmPC NHS patient advice ${msg}`.slice(0, 260));
+  } else if (med) {
+    queries.push(`${med} UK prescribing information NHS`.slice(0, 260));
+  }
+
+  const topicQueries = [];
+  if (/treatment gap|supply check|another provider|last injection|switched provider/i.test(combined)) {
+    topicQueries.push("GLP-1 weight loss treatment gap another provider UK prescribing continuity");
+  }
+  if (/side effect|nausea|vomit|diarr|pancreatitis|injection site/i.test(combined)) {
+    topicQueries.push(`${med || "Mounjaro Wegovy"} common side effects UK NHS management`);
+  }
+  if (/bmi|weight loss|comorbid|eligible|obesity/i.test(combined)) {
+    topicQueries.push("GLP-1 obesity weight management BMI eligibility UK NICE");
+  }
+  if (/mounjaro|tirzepatide/i.test(combined)) {
+    topicQueries.push("Mounjaro tirzepatide UK missed dose storage pen expiry");
+  }
+  if (/wegovy|semaglutide|ozempic/i.test(combined)) {
+    topicQueries.push("Wegovy semaglutide UK missed dose storage pen expiry");
+  }
+  if (/thyroid|medullary|men2/i.test(combined)) {
+    topicQueries.push("GLP-1 thyroid monitoring UK prescribing guidance");
+  }
+  if (/mental health|depression|suicid|anxiety/i.test(combined)) {
+    topicQueries.push("GLP-1 weight loss mental health depression warning UK");
+  }
+  if (/metformin|diabetes|hypoglyc|sick day/i.test(combined)) {
+    topicQueries.push("GLP-1 metformin sick day rule hypoglycaemia UK diabetes");
+  }
+  if (/fatty liver|nafld|liver/i.test(combined)) {
+    topicQueries.push("GLP-1 fatty liver NAFLD UK prescribing liver function monitoring");
+  }
+  if (/pregn|breastfeed|conceive/i.test(combined)) {
+    topicQueries.push("GLP-1 pregnancy breastfeeding contraindication UK");
+  }
+  if (/gallbladder|cholecyst|gallstone/i.test(combined)) {
+    topicQueries.push("GLP-1 gallbladder gallstones cholecystectomy UK contraindication");
+  }
+
+  topicQueries.forEach((q) => queries.push(q.slice(0, 260)));
+
+  const seen = new Set();
+  return queries
+    .map((q) => q.trim())
+    .filter((q) => q.length >= 8 && !seen.has(q.toLowerCase()) && seen.add(q.toLowerCase()))
+    .slice(0, 3);
+}
+
+async function searchWebOnce(query, tavilyKey) {
   const q = (query || "").trim();
   if (!q) return "";
 
@@ -251,17 +313,18 @@ async function searchWebForAi(query, tavilyKey) {
         body: JSON.stringify({
           api_key: tavilyKey,
           query: q,
-          search_depth: "basic",
-          max_results: 5,
+          search_depth: "advanced",
+          max_results: 6,
           include_answer: true,
+          topic: "general",
         }),
       });
       if (r.ok) {
         const j = await r.json();
         const parts = [];
-        if (j.answer) parts.push(`Summary: ${j.answer}`);
-        (j.results || []).slice(0, 5).forEach((item, i) => {
-          parts.push(`${i + 1}. ${item.title || "Result"}\n${item.content || ""}\n${item.url || ""}`.trim());
+        if (j.answer) parts.push(`Answer: ${j.answer}`);
+        (j.results || []).slice(0, 6).forEach((item, i) => {
+          parts.push(`${i + 1}. ${item.title || "Result"}\n${item.content || ""}\nSource: ${item.url || "unknown"}`.trim());
         });
         if (parts.length) return parts.join("\n\n");
       }
@@ -270,13 +333,14 @@ async function searchWebForAi(query, tavilyKey) {
 
   try {
     const r = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`
+      `https://api.duckduckgo.com/?q=${encodeURIComponent(q + " UK NHS")}&format=json&no_html=1&skip_disambig=1`
     );
     if (r.ok) {
       const j = await r.json();
       const parts = [];
       if (j.AbstractText) parts.push(j.AbstractText);
-      (j.RelatedTopics || []).slice(0, 4).forEach((t) => {
+      if (j.AbstractURL) parts.push(`Source: ${j.AbstractURL}`);
+      (j.RelatedTopics || []).slice(0, 5).forEach((t) => {
         if (t.Text) parts.push(t.Text);
         else if (Array.isArray(t.Topics)) {
           t.Topics.slice(0, 2).forEach((x) => { if (x.Text) parts.push(x.Text); });
@@ -289,43 +353,62 @@ async function searchWebForAi(query, tavilyKey) {
   return "";
 }
 
-function buildEmailSystemPrompt(context, webResults) {
-  let sys = `You are an expert clinical message writer for EverydayMeds, a UK online GLP-1 weight loss pharmacy (Mounjaro, Wegovy, etc.).
+async function searchWebForAi(queries, tavilyKey) {
+  const list = Array.isArray(queries) ? queries : [queries];
+  const blocks = [];
+  for (const q of list) {
+    const result = await searchWebOnce(q, tavilyKey);
+    if (result) blocks.push(`=== Search: ${q} ===\n${result}`);
+  }
+  return blocks.join("\n\n");
+}
 
-You work like ChatGPT for a skilled prescriber: understand their INTENT, follow multi-turn refinements, and use attachments when provided.
+function buildEmailSystemPrompt(context, webResults) {
+  let sys = `You are an expert UK clinical prescriber assistant for EverydayMeds, an online GLP-1 weight loss pharmacy (Mounjaro/tirzepatide, Wegovy/semaglutide, etc.).
+
+You work like ChatGPT for a skilled prescriber: deeply understand intent, reason carefully, use all available data, and write accurate patient messages.
+
+HOW TO THINK (internal — do not output these steps):
+1. Read the prescriber's instructions and identify the exact goal.
+2. Extract every relevant fact from order context, consultation Q&A, chat, attachments, and web results.
+3. Note what is UNKNOWN — ask the patient rather than guessing.
+4. Apply UK GLP-1 prescribing logic (supply gaps, dose continuity, contraindications, safety-netting).
+5. Draft a clear, accurate patient message.
 
 PRIMARY RULE — FOLLOW THE PRESCRIBER:
 - Their instructions are your main task. Address EXACTLY what they ask.
-- Do NOT invent unrelated topics (thyroid cancer, eating disorders, SCR flags, etc.) unless they mention them or the order context explicitly shows them.
+- Do NOT invent unrelated topics unless they appear in context or the prescriber mentions them.
 - If the scenario mentions treatment gap, last injection, last order date, or another provider — focus on that.
 
-ANTI-HALLUCINATION (CRITICAL):
-- Use ONLY facts present in the order context, consultation answers, attachments, or web search results below.
-- Do NOT invent dates, medication names, doses, order numbers, side effects, diagnoses, or patient statements.
-- If a detail is missing (e.g. last injection date unknown), ask the patient — do not guess or assume.
-- Do NOT claim you reviewed SCR, documents, or chat unless that information appears in the context or attachments.
-- If consultation answers conflict with prescriber notes, follow the prescriber's instructions but do not fabricate reconciliation.
-- When uncertain, use neutral wording ("could you confirm…") rather than stating unverified facts.
+ACCURACY & ANTI-HALLUCINATION (CRITICAL):
+- Ground every statement in order context, consultation answers, attachments, or web search results.
+- NEVER invent dates, doses, order numbers, diagnoses, side effects, or patient statements.
+- NEVER claim you reviewed SCR, documents, or chat unless that data is in context or attachments.
+- If information is missing, ask specific questions — do not assume.
+- Prefer precise, cautious clinical language over vague reassurance.
+- When web results conflict with order context, trust order context for this patient; use web only for general UK clinical facts.
+
+WEB SEARCH (when provided):
+- Use web results for up-to-date UK NHS/NICE/SmPC facts: dosing, missed doses, side effects, contraindications, monitoring.
+- Do not copy web text verbatim — synthesise into plain patient-friendly language.
+- Do not cite URLs in the patient message unless the prescriber asks.
 
 REFINEMENT (multi-turn):
-- When the prescriber sends follow-up notes ("make it shorter", "add order on hold", "mention February order"), revise the previous draft.
-- Keep what still works; change only what they ask.
-- Return the FULL revised patient message only — no commentary, no "Here is the revised version".
+- Follow-up notes ("shorter", "add order on hold", "mention February order") → revise the previous draft.
+- Return the FULL revised patient message only — no commentary.
 
-ATTACHMENTS (images/files):
-- Screenshots may show SCR, chat, consultation answers, videos, or documents — extract relevant facts and use them in the message.
-- Do not say "I analysed your screenshot" — weave findings naturally.
-- If an attachment is unreadable or empty, say you need clearer information — do not invent its contents.
+ATTACHMENTS:
+- Extract facts from screenshots (SCR, chat, consultation, documents) and weave naturally into the message.
+- If unreadable, ask for clearer information.
 
 CLINICAL REASONING (when relevant):
 - Each pen order ≈ 4 weeks of weekly injections.
-- If last EverydayMeds order was months ago but they claim a recent injection, supply would not cover the gap — ask about another provider.
-- Ask for date/strength of last injection when timelines don't match.
-- Do not approve or reject prescriptions — request info or explain next steps only.
+- Gap since last order + recent injection claim → ask about another provider/source.
+- Do not approve or reject — request info or explain next steps.
 
 Message format:
-- Patient encrypted chat thread (not external email — no Subject line).
-- Start with "Dear {first name}," using the patient's first name from context.
+- Encrypted patient chat (not email — no Subject line).
+- Start with "Dear {first name}," using first name from context.
 - Professional, warm, British English.
 - Mention order on hold when appropriate.
 - No phone numbers or MedExpress branding.
@@ -337,7 +420,9 @@ Order context:
 ${context || "No additional order context available."}`;
 
   if (webResults) {
-    sys += `\n\nWeb search results (use for factual UK clinical/pharmacy context when relevant — do not invent facts not supported here):\n${webResults}`;
+    sys += `\n\nWeb search results (factual UK clinical reference — synthesise accurately, do not invent beyond this):\n${webResults}`;
+  } else {
+    sys += `\n\n(No web search results for this request — rely only on order context and attachments.)`;
   }
   return sys;
 }
@@ -370,8 +455,8 @@ async function callOpenAiEmail(messages, openaiKey) {
     body: JSON.stringify({
       model: "gpt-4o",
       messages,
-      max_tokens: 1600,
-      temperature: 0.25,
+      max_tokens: 2400,
+      temperature: 0.2,
     }),
   });
   if (!r.ok) {
@@ -418,15 +503,18 @@ async function generatePatientEmail(payload) {
   }
 
   let webResults = "";
-  if (webSearch && userMessage) {
-    webResults = await searchWebForAi(userMessage, tavilyKey);
+  if (webSearch) {
+    const queries = buildWebSearchQueries(context, userMessage);
+    if (queries.length) {
+      webResults = await searchWebForAi(queries, tavilyKey);
+    }
   }
 
   const isRefine = history.length > 0;
   const sys = buildEmailSystemPrompt(context, webResults);
   const messages = [{ role: "system", content: sys }];
 
-  for (const turn of history.slice(-12)) {
+  for (const turn of history.slice(-16)) {
     if (turn?.role === "user" || turn?.role === "assistant") {
       messages.push({ role: turn.role, content: turn.content });
     }
