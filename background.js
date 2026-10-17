@@ -90,9 +90,6 @@ async function findExistingRxTab(returnTabId, returnUrl, windowId) {
         }
       }
     }
-    for (const tab of tabs) {
-      if (tab.id && tab.url && RX_ORDER_RE.test(tab.url)) return tab.id;
-    }
   }
   try {
     const matches = await tabsQuery({ url: "https://rx.everydaymeds.co.uk/order/*" });
@@ -100,10 +97,10 @@ async function findExistingRxTab(returnTabId, returnUrl, windowId) {
       const exact = matches.find((t) => t.id && orderPathname(t.url) === wantPath);
       if (exact?.id) return exact.id;
     }
-    return matches[0]?.id ?? null;
   } catch {
     return null;
   }
+  return null;
 }
 
 async function collectScrTabsToClose(windowId, trackedIds, senderTabId, rxTabId) {
@@ -560,7 +557,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     message.type === "ACTIVE_TAB_CHANGED"
   ) {
     try {
-      chrome.runtime.sendMessage(message).catch(() => {});
+      const tabId = sender.tab && sender.tab.id;
+      const tabUrl = sender.tab && sender.tab.url;
+      chrome.runtime.sendMessage({
+        ...message,
+        tabId: tabId ?? message.tabId ?? null,
+        tabUrl: tabUrl ?? message.tabUrl ?? null,
+      }).catch(() => {});
     } catch (e) {}
   }
 

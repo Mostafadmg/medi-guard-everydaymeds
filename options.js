@@ -347,7 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
       rationaleInput.value = result.default_rationale_text || BUILTIN_RATIONALE;
       if (holdInput) holdInput.value = result.default_hold_reason || BUILTIN_HOLD;
       if (sendPatientCounsellingInput) {
-        sendPatientCounsellingInput.checked = result.send_patient_counselling_on_approve !== false;
+        sendPatientCounsellingInput.checked = result.send_patient_counselling_on_approve === true;
       }
       ptMgr.render(migratePatientCounsellingTemplates(result));
       const showStepsInput = document.getElementById("showWorkflowSteps");
@@ -385,7 +385,7 @@ document.addEventListener("DOMContentLoaded", () => {
     counsellingInput.value = BUILTIN_COUNSELLING;
     rationaleInput.value = BUILTIN_RATIONALE;
     if (holdInput) holdInput.value = BUILTIN_HOLD;
-    if (sendPatientCounsellingInput) sendPatientCounsellingInput.checked = true;
+    if (sendPatientCounsellingInput) sendPatientCounsellingInput.checked = false;
     ptMgr.render(BUILTIN_PATIENT_COUNSELLING_TEMPLATES);
     const showStepsInput = document.getElementById("showWorkflowSteps");
     if (showStepsInput) showStepsInput.checked = true;

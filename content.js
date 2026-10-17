@@ -1566,8 +1566,11 @@ function ensureInlinePatientCardObserver() {
 function performScan() {
   // Only scan on od2-tab pages
   if (!document.querySelector(".od2-tabs")) return;
+  // Background order tabs must not push scans — that makes the side panel flip to another patient.
+  if (document.visibilityState === "hidden") return;
 
   const data = scrapeOrderData();
+  try { data.pageUrl = window.location.href; } catch (_) {}
   lastScannedData = data;
 
   renderInlinePatientCard(data);
@@ -1988,6 +1991,9 @@ function boot() {
   // Periodically rescan in case data changes
   if (scanInterval) clearInterval(scanInterval);
   scanInterval = setInterval(performScan, 10000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") performScan();
+  });
 }
 
 if (document.readyState === "loading") {

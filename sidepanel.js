@@ -5,6 +5,54 @@ let serverUrl = "https://6953ffd7-1719-4bf3-8baf-cd9245046e01-00-2kzcudwa3v17m.p
 let openaiKey = null;
 let currentOrderData = null;
 let lastSeenOrderKey = null;
+/** Order tab the side panel is bound to — avoids flipping patients when other order tabs scan. */
+let panelBoundTabId = null;
+let panelBoundOrderPath = null;
+
+const RX_ORDER_PATH_RE = /^\/order\//i;
+function orderPathFromUrl(url) {
+  try { return new URL(url).pathname; } catch { return null; }
+}
+function isRxOrderUrl(url) {
+  if (!url) return false;
+  try { return /rx\.everydaymeds\.co\.uk/i.test(url) && RX_ORDER_PATH_RE.test(new URL(url).pathname); } catch { return false; }
+}
+function scanMessageFromBoundTab(msg) {
+  if (!msg || msg.tabId == null) return false;
+  if (panelBoundTabId == null) return false;
+  return msg.tabId === panelBoundTabId;
+}
+function bindPanelToTab(tab) {
+  if (!tab?.id || !isRxOrderUrl(tab.url)) return false;
+  panelBoundTabId = tab.id;
+  panelBoundOrderPath = orderPathFromUrl(tab.url);
+  return true;
+}
+function queryActiveTab() {
+  return new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => resolve(tabs[0] || null));
+  });
+}
+async function resolveContentTabId(preferredTabId) {
+  if (preferredTabId != null) {
+    try {
+      const tab = await chrome.tabs.get(preferredTabId);
+      if (tab?.id && isRxOrderUrl(tab.url)) return tab.id;
+    } catch (_) {}
+  }
+  if (panelBoundTabId != null) {
+    try {
+      const tab = await chrome.tabs.get(panelBoundTabId);
+      if (tab?.id && isRxOrderUrl(tab.url)) return tab.id;
+    } catch (_) {
+      panelBoundTabId = null;
+      panelBoundOrderPath = null;
+    }
+  }
+  const active = await queryActiveTab();
+  if (bindPanelToTab(active)) return active.id;
+  return null;
+}
 let conversationHistory = [];
 let isChatRunning = false;
 
@@ -190,13 +238,15 @@ if (!IS_EXT && typeof window !== "undefined") {
   });
 }
 const BRIDGE_TIMEOUT_MS = 20000;
-function msgContent(payload) {
+function msgContent(payload, options) {
+  const targetTabId = options && options.tabId != null ? options.tabId : null;
   if (IS_EXT) {
     return new Promise((resolve, reject) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs[0]) { reject(new Error("No active tab")); return; }
-        chrome.tabs.sendMessage(tabs[0].id, payload).then(resolve).catch(reject);
-      });
+      resolveContentTabId(targetTabId).then((tabId) => {
+        if (!tabId) { reject(new Error("No order tab")); return; }
+        panelBoundTabId = tabId;
+        chrome.tabs.sendMessage(tabId, payload).then(resolve).catch(reject);
+      }).catch(reject);
     });
   }
   // PWA bridge fallback
@@ -1076,7 +1126,7 @@ function getPatientCounsellingSettings() {
       chrome.storage.sync.get(
         ["send_patient_counselling_on_approve", "patient_counselling_templates", "default_approve_patient_message"],
         (r) => {
-          const enabled = r && r.send_patient_counselling_on_approve !== false;
+          const enabled = !!(r && r.send_patient_counselling_on_approve === true);
           let templates = Array.isArray(r?.patient_counselling_templates)
             ? r.patient_counselling_templates.filter((t) => t && t.text)
             : [];
@@ -1096,7 +1146,7 @@ function getPatientCounsellingSettings() {
       );
     } catch (_) {
       resolve({
-        enabled: true,
+        enabled: false,
         message: APPROVE_PATIENT_MESSAGE_BUILTIN,
         templateName: "Default",
       });
@@ -1254,6 +1304,12 @@ async function bulkApproveOrUndo() {
   if (isBulkRunning) return;
   const btn = document.getElementById("btn-bulk-approve");
   if (!btn || btn.disabled) return;
+  let bulkTabId = null;
+  try {
+    bulkTabId = await resolveContentTabId(panelBoundTabId);
+    if (bulkTabId) panelBoundTabId = bulkTabId;
+  } catch (_) {}
+  const contentOpts = bulkTabId != null ? { tabId: bulkTabId } : undefined;
   const mode = btn.dataset.mode === "undo" ? "undo" : "approve";
   const initialCompletion = (currentOrderData && currentOrderData.tabCompletion) || {};
   const targets = [...TABS_WITH_DONE].filter(t =>
@@ -1286,7 +1342,7 @@ async function bulkApproveOrUndo() {
   if (mode === "approve") {
     try {
       btn.innerHTML = `${SPIN_SVG}<span>Verifying photos…</span>`;
-      const vResp = await msgContent({ type: "DOC_VERIFY_ALL" });
+      const vResp = await msgContent({ type: "DOC_VERIFY_ALL" }, contentOpts);
       if (vResp?.count) {
         toast(`✓ Verified ${vResp.count} item${vResp.count === 1 ? "" : "s"}`, "success", 1500);
       }
@@ -1313,7 +1369,7 @@ async function bulkApproveOrUndo() {
 
     try {
       if (mode === "approve") {
-        const resp = await msgContent({ type: "MARK_TAB_DONE", tabName: tab, autoAdvance: false });
+        const resp = await msgContent({ type: "MARK_TAB_DONE", tabName: tab, autoAdvance: false }, contentOpts);
         if (resp?.success) {
           ok++;
           if (currentOrderData) {
@@ -1326,9 +1382,9 @@ async function bulkApproveOrUndo() {
         }
       } else {
         // Undo: navigate to the tab first, then toggle off
-        await msgContent({ type: "NAVIGATE_TAB", tabName: tab });
+        await msgContent({ type: "NAVIGATE_TAB", tabName: tab }, contentOpts);
         await new Promise(r => setTimeout(r, 250));
-        const resp = await msgContent({ type: "MARK_TAB_DONE", tabName: tab, autoAdvance: false });
+        const resp = await msgContent({ type: "MARK_TAB_DONE", tabName: tab, autoAdvance: false }, contentOpts);
         if (resp?.success) {
           ok++;
           if (currentOrderData) {
@@ -1360,7 +1416,7 @@ async function bulkApproveOrUndo() {
         btn.innerHTML = `${SPIN_SVG}<span>Sending patient message…</span>`;
         const message = substituteEmail(counselling.message).trim();
         if (message) {
-          const cResp = await msgContent({ type: "SEND_PATIENT_MESSAGE", text: message });
+          const cResp = await msgContent({ type: "SEND_PATIENT_MESSAGE", text: message }, contentOpts);
           if (cResp?.success) {
             toast(`Counselling sent (${counselling.templateName})`, "success", 1800);
           } else if (cResp?.error) {
@@ -1649,11 +1705,7 @@ async function sendChat(text) {
 //  SCAN
 // ═══════════════════════════════════════════════
 
-function doScan() {
-  // Route through msgContent so the PWA fallback (postMessage bridge into
-  // the proxied page's chrome.* shim, which runs content.js) works without
-  // any chrome.tabs API. In the real extension IS_EXT is true and this
-  // still uses chrome.tabs.sendMessage internally.
+async function doScan() {
   const handle = (resp) => {
     if (resp && resp.data) {
       currentOrderData = resp.data;
@@ -1667,12 +1719,18 @@ function doScan() {
     }
   };
   if (IS_EXT) {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (!tabs[0]) { toast("No active tab found", "error"); return; }
-      chrome.tabs.sendMessage(tabs[0].id, { type: "GET_SCAN_DATA" })
-        .then(handle)
-        .catch(() => toast("Could not connect — navigate to an order page first", "error"));
-    });
+    try {
+      const tabId = await resolveContentTabId(panelBoundTabId);
+      if (!tabId) {
+        toast("No order tab — open an order on rx.everydaymeds.co.uk", "error");
+        return;
+      }
+      panelBoundTabId = tabId;
+      const resp = await chrome.tabs.sendMessage(tabId, { type: "GET_SCAN_DATA" });
+      handle(resp);
+    } catch {
+      toast("Could not connect — navigate to an order page first", "error");
+    }
   } else {
     msgContent({ type: "GET_SCAN_DATA" }).then(handle);
   }
@@ -1725,8 +1783,27 @@ document.addEventListener("DOMContentLoaded", () => {
   initWorkflowStepsPanel();
   document.getElementById("btn-place-hold")?.addEventListener("click", placeOnHold);
 
+  if (IS_EXT && chrome.tabs && chrome.tabs.onActivated) {
+    chrome.tabs.onActivated.addListener(({ tabId }) => {
+      chrome.tabs.get(tabId, (tab) => {
+        if (chrome.runtime.lastError || !tab) return;
+        if (!isRxOrderUrl(tab.url)) return;
+        bindPanelToTab(tab);
+        chrome.tabs.sendMessage(tabId, { type: "GET_SCAN_DATA" })
+          .then((resp) => {
+            if (!resp?.data) return;
+            currentOrderData = resp.data;
+            renderBanner(currentOrderData);
+            showWorkflow(currentOrderData);
+          })
+          .catch(() => {});
+      });
+    });
+  }
+
   chrome.runtime.onMessage.addListener(msg => {
     if (msg.type === "ORDER_DATA_SCANNED" && msg.data) {
+      if (!scanMessageFromBoundTab(msg)) return;
       // Detect a real patient/order change and wipe the per-prescription
       // comment box so notes from a previous patient can't be carried over.
       const newKey = msg.data.orderNo || msg.data.patientName || null;
@@ -1742,6 +1819,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showWorkflow(currentOrderData);
     }
     if (msg.type === "TAB_COMPLETION_CHANGED" && msg.data) {
+      if (!scanMessageFromBoundTab(msg)) return;
       if (currentOrderData) {
         currentOrderData.tabCompletion = msg.data;
         renderBanner(currentOrderData);
@@ -1757,6 +1835,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
     if (msg.type === "ACTIVE_TAB_CHANGED" && msg.data) {
+      if (!scanMessageFromBoundTab(msg)) return;
       if (currentOrderData) {
         currentOrderData.activeTab = msg.data.activeTab;
         highlightActiveTab(msg.data.activeTab);
@@ -1764,6 +1843,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  queryActiveTab().then((tab) => bindPanelToTab(tab));
   setTimeout(doScan, 600);
 });
 
