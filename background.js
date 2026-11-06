@@ -549,12 +549,157 @@ async function generatePatientEmail(payload) {
   }
 }
 
+const PARALLEL_POOL_KEY = "clinical_parallel_pool";
+
+function getParallelPool() {
+  return new Promise((resolve) => {
+    chrome.storage.session.get([PARALLEL_POOL_KEY], (r) => {
+      resolve(r[PARALLEL_POOL_KEY] || null);
+    });
+  });
+}
+
+function saveParallelPool(pool) {
+  return new Promise((resolve) => {
+    if (pool) chrome.storage.session.set({ [PARALLEL_POOL_KEY]: pool }, () => resolve());
+    else chrome.storage.session.remove(PARALLEL_POOL_KEY, () => resolve());
+  });
+}
+
+function broadcastParallelPool(pool, event) {
+  try {
+    chrome.runtime.sendMessage({
+      type: "CLINICAL_PARALLEL_UPDATE",
+      event: event || "progress",
+      data: pool ? {
+        active: !!pool.active,
+        pending: (pool.pending || []).length,
+        processed: pool.processed || 0,
+        failed: pool.failed || 0,
+        workers: (pool.workerTabIds || []).length,
+        lastError: pool.lastError || null,
+      } : null,
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+async function claimParallelOrder(tabId) {
+  const pool = await getParallelPool();
+  if (!pool?.active || !tabId) return { url: null, scrMode: pool?.scrMode, done: !pool?.active };
+  while ((pool.pending || []).length) {
+    const url = pool.pending.shift();
+    if (!pool.inProgress) pool.inProgress = {};
+    pool.inProgress[String(tabId)] = url;
+    await saveParallelPool(pool);
+    broadcastParallelPool(pool, "progress");
+    return { url, scrMode: pool.scrMode, done: false };
+  }
+  if (pool.inProgress) delete pool.inProgress[String(tabId)];
+  const stillBusy = pool.inProgress && Object.keys(pool.inProgress).length;
+  if (!stillBusy) {
+    pool.active = false;
+    await saveParallelPool(pool);
+    broadcastParallelPool(pool, "done");
+    return { url: null, scrMode: pool.scrMode, done: true };
+  }
+  await saveParallelPool(pool);
+  return { url: null, scrMode: pool.scrMode, done: false, idle: true };
+}
+
+async function completeParallelOrder(tabId, success, error) {
+  const pool = await getParallelPool();
+  if (!pool) return null;
+  if (pool.inProgress) delete pool.inProgress[String(tabId)];
+  if (success) pool.processed = (pool.processed || 0) + 1;
+  else {
+    pool.failed = (pool.failed || 0) + 1;
+    pool.lastError = error || "Clinical check failed";
+    if (pool.stopOnError !== false) pool.active = false;
+  }
+  await saveParallelPool(pool);
+  broadcastParallelPool(pool, success ? "progress" : "error");
+  return pool;
+}
+
+async function startParallelClinicalPool(message, sender) {
+  const tabId = sender.tab && sender.tab.id;
+  const windowId = sender.tab && sender.tab.windowId;
+  if (!tabId || windowId == null) {
+    return { success: false, error: "Open the prescription queue in this tab first" };
+  }
+  const existing = await getParallelPool();
+  if (existing?.active) {
+    return { success: false, error: "Parallel clinical check is already running" };
+  }
+  const urls = Array.isArray(message.urls) ? message.urls.filter(Boolean) : [];
+  if (!urls.length) return { success: false, error: "No orders to process" };
+  let workerCount = parseInt(message.workerCount, 10);
+  if (!Number.isFinite(workerCount)) workerCount = 3;
+  workerCount = Math.max(2, Math.min(6, workerCount));
+  const queueUrl = message.queueUrl || "https://rx.everydaymeds.co.uk/pending-orders-new?tab=rx_approved";
+  const scrMode = message.scrMode === "accessed" ? "accessed" : "not_accessed";
+
+  const pool = {
+    active: true,
+    pending: urls.slice(),
+    inProgress: {},
+    processed: 0,
+    failed: 0,
+    scrMode,
+    queueUrl,
+    workerTabIds: [tabId],
+    lastError: null,
+    stopOnError: message.stopOnError !== false,
+  };
+  await saveParallelPool(pool);
+  broadcastParallelPool(pool, "started");
+
+  const workerLanding = `${queueUrl}${queueUrl.includes("?") ? "&" : "?"}mg_clinical_worker=1`;
+  for (let i = 1; i < workerCount; i++) {
+    const tab = await tabCreate({ url: workerLanding, windowId, active: false });
+    if (tab?.id) pool.workerTabIds.push(tab.id);
+  }
+  await saveParallelPool(pool);
+
+  const kick = (id) => {
+    chrome.tabs.sendMessage(id, { type: "CLINICAL_PARALLEL_WORK" }).catch(() => {});
+  };
+  kick(tabId);
+  pool.workerTabIds.slice(1).forEach((id, i) => {
+    setTimeout(() => kick(id), 500 * (i + 1));
+  });
+
+  return { success: true, workers: pool.workerTabIds.length, total: urls.length };
+}
+
+function tabCreate(props) {
+  return new Promise((resolve) => {
+    chrome.tabs.create(props, (tab) => {
+      void chrome.runtime.lastError;
+      resolve(tab || null);
+    });
+  });
+}
+
+async function stopParallelClinicalPool() {
+  const pool = await getParallelPool();
+  if (!pool) return { success: true };
+  pool.active = false;
+  pool.lastError = "Stopped by user";
+  pool.pending = [];
+  await saveParallelPool(pool);
+  broadcastParallelPool(pool, "stopped");
+  return { success: true };
+}
+
 // Forward messages from content script to side panel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (
     message.type === "ORDER_DATA_SCANNED" ||
     message.type === "TAB_COMPLETION_CHANGED" ||
-    message.type === "ACTIVE_TAB_CHANGED"
+    message.type === "ACTIVE_TAB_CHANGED" ||
+    message.type === "CLINICAL_CHECK_BATCH_UPDATE" ||
+    message.type === "CLINICAL_PARALLEL_UPDATE"
   ) {
     try {
       const tabId = sender.tab && sender.tab.id;
@@ -603,6 +748,60 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     generatePatientEmail(message)
       .then((text) => sendResponse({ success: true, text }))
       .catch((e) => sendResponse({ success: false, error: e?.message || "Generation failed" }));
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_START") {
+    startParallelClinicalPool(message, sender).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_STOP") {
+    stopParallelClinicalPool().then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_CLAIM") {
+    claimParallelOrder(sender.tab && sender.tab.id).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_COMPLETE") {
+    completeParallelOrder(sender.tab && sender.tab.id, !!message.success, message.error)
+      .then((pool) => {
+        if (pool?.active) {
+          return claimParallelOrder(sender.tab && sender.tab.id);
+        }
+        return { url: null, done: true, scrMode: pool?.scrMode };
+      })
+      .then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_STATUS") {
+    getParallelPool().then((pool) => {
+      sendResponse({
+        success: true,
+        active: !!(pool && pool.active),
+        pending: pool ? (pool.pending || []).length : 0,
+        processed: pool?.processed || 0,
+        failed: pool?.failed || 0,
+        workers: pool?.workerTabIds?.length || 0,
+      });
+    });
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_GET_TAB_ASSIGNMENT") {
+    getParallelPool().then((pool) => {
+      const tabId = sender.tab && sender.tab.id;
+      const url = pool && tabId != null ? pool.inProgress?.[String(tabId)] : null;
+      sendResponse({
+        active: !!(pool && pool.active),
+        url: url || null,
+        scrMode: pool?.scrMode || "not_accessed",
+      });
+    });
     return true;
   }
 

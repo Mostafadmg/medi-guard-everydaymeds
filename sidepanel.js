@@ -421,6 +421,7 @@ function showWorkflow(data) {
   if (!data) {
     empty.style.display = "flex";
     content.style.display = "none";
+    updateOrderActionButtons(null);
     return;
   }
   empty.style.display = "none";
@@ -458,6 +459,91 @@ function qtyToSupplyWeeks(qty) {
   return Math.max(4, (parseInt(qty, 10) || 1) * 4);
 }
 
+async function refreshQueueContext() {
+  try {
+    return await msgContent({ type: "GET_QUEUE_CONTEXT" });
+  } catch {
+    return { isQueue: false };
+  }
+}
+
+function getParallelWorkerCount() {
+  const workerSelect = document.getElementById("clinical-parallel-workers");
+  const n = workerSelect ? parseInt(workerSelect.value, 10) : NaN;
+  return Number.isFinite(n) ? n : 5;
+}
+
+function parallelWorkersOrdersLabel(workers, orderCount) {
+  const w = workers || getParallelWorkerCount();
+  if (orderCount != null && Number.isFinite(orderCount) && orderCount > 0) {
+    return `${w} workers · ~${Math.ceil(orderCount / w)} orders each`;
+  }
+  return `${w} workers`;
+}
+
+function updateQueueActionButtons(ctx) {
+  const processBtn = document.getElementById("btn-process-clinical-queue");
+  const stopBtn = document.getElementById("btn-stop-clinical-queue");
+  const toolbar = document.getElementById("clinical-queue-toolbar");
+  const workerSelect = document.getElementById("clinical-parallel-workers");
+  if (!processBtn) return;
+  const onQueue = !!(ctx && ctx.isQueue);
+  const running = !!(ctx && (ctx.batchActive || ctx.parallelActive));
+  processBtn.classList.toggle("is-hidden", !onQueue);
+  if (toolbar) toolbar.classList.toggle("is-hidden", !onQueue || running);
+  if (stopBtn) stopBtn.classList.toggle("is-hidden", !onQueue || !running);
+  if (workerSelect && onQueue && !running) workerSelect.disabled = false;
+  const label = processBtn.querySelector("span");
+  if (label && onQueue) {
+    if (ctx.parallelActive && ctx.parallel) {
+      const w = ctx.parallel.workers || "?";
+      const done = ctx.parallel.processed || 0;
+      const left = ctx.parallel.pending != null ? ctx.parallel.pending : "?";
+      label.textContent = `Parallel run (${w} workers) — ${done} done, ${left} left`;
+      processBtn.disabled = true;
+      if (workerSelect) workerSelect.disabled = true;
+    } else if (ctx.batchActive && ctx.batch) {
+      label.textContent = `Processing queue (${ctx.batch.processed || 0}/${ctx.batch.total || "?"})…`;
+      processBtn.disabled = true;
+    } else {
+      const n = ctx.clinicalCheckCount;
+      const workers = getParallelWorkerCount();
+      if (typeof n === "number" && n === 0) {
+        label.textContent = "Run parallel clinical check (no orders visible)";
+        processBtn.disabled = true;
+      } else if (typeof n === "number" && n > 0) {
+        label.textContent = `Run parallel clinical check (${parallelWorkersOrdersLabel(workers, n)})`;
+        processBtn.disabled = false;
+      } else {
+        label.textContent = "Run parallel clinical check";
+        processBtn.disabled = false;
+      }
+    }
+  }
+}
+
+function updateOrderActionButtons(data) {
+  const actions = (data && data.pageActions) || {};
+  const hasApprove = !!actions.approve;
+  const hasDispensary = !!actions.dispensary;
+  const issueBtn = document.getElementById("btn-issue-rx");
+  const clinicalBtn = document.getElementById("btn-clinical-check");
+  const scrWrap = document.querySelector(".scr-mode-wrap");
+  const rxCommentWrap = document.querySelector("#rx-comment")?.closest(".rx-comment-wrap");
+  const rxQuick = document.getElementById("rx-quick-comments");
+
+  if (issueBtn) issueBtn.classList.toggle("is-hidden", !hasApprove);
+  if (clinicalBtn) clinicalBtn.classList.toggle("is-hidden", !hasDispensary);
+  if (scrWrap) scrWrap.classList.toggle("is-hidden", !hasApprove && !hasDispensary);
+  if (!hasApprove && !hasDispensary) {
+    refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
+  } else {
+    updateQueueActionButtons({ isQueue: false });
+  }
+  if (rxCommentWrap) rxCommentWrap.classList.toggle("is-hidden", !hasApprove);
+  if (rxQuick) rxQuick.classList.toggle("is-hidden", !hasApprove);
+}
+
 function renderWorkflow(data) {
   const list = document.getElementById("steps-list");
   if (!list || !data) return;
@@ -466,6 +552,7 @@ function renderWorkflow(data) {
   const activeTab = data.activeTab || null;
   updateProgress(completion);
   updateBulkApproveButton(completion);
+  updateOrderActionButtons(data);
 
   // Preserve expanded state across re-renders
   const prevExpanded = !!document.querySelector(".step-card.is-expanded");
@@ -1037,6 +1124,98 @@ function initScrModeToggles() {
   accessed.addEventListener("change", () => {
     if (accessed.checked) saveMode("accessed");
   });
+}
+
+// ── Clinical check (pharmacist) — dispensary drawer + P2U + Send to dispensary ──
+async function processClinicalCheckQueue() {
+  const btn = document.getElementById("btn-process-clinical-queue");
+  if (!btn || btn.disabled) return;
+  const ctx = await refreshQueueContext();
+  if (!ctx?.isQueue) {
+    toast("Open Prescription queue → Clinical check tab first", "error");
+    return;
+  }
+  if (!ctx.clinicalCheckTabActive) {
+    toast("Switch to the Clinical check tab on the queue, then try again", "error", 2800);
+    return;
+  }
+  if (ctx.clinicalCheckCount === 0) {
+    toast("No orders listed under Clinical check", "error", 2800);
+    return;
+  }
+  const workerCount = getParallelWorkerCount();
+  const orderHint =
+    ctx.clinicalCheckCount > 0
+      ? parallelWorkersOrdersLabel(workerCount, ctx.clinicalCheckCount)
+      : parallelWorkersOrdersLabel(workerCount);
+  btn.disabled = true;
+  toast(`Collecting orders — ${orderHint}…`, "default", 2600);
+  try {
+    const resp = await msgContent({
+      type: "CLINICAL_PARALLEL_QUEUE_START",
+      scrMode: getScrMode(),
+      workerCount,
+    });
+    if (resp?.success) {
+      const total = resp.total ?? ctx.clinicalCheckCount ?? 0;
+      toast(
+        `Started — ${parallelWorkersOrdersLabel(resp.workers, total)} (${total} queued)`,
+        "success",
+        4000
+      );
+      updateQueueActionButtons({
+        ...ctx,
+        parallelActive: true,
+        parallel: { workers: resp.workers, processed: 0, pending: resp.total, failed: 0 },
+      });
+    } else {
+      toast(resp?.error || "Could not start queue processing", "error");
+      btn.disabled = false;
+    }
+  } catch {
+    toast("Could not connect — focus the queue tab and retry", "error");
+    btn.disabled = false;
+  }
+}
+
+async function stopClinicalCheckQueue() {
+  try {
+    const ctx = await refreshQueueContext();
+    if (ctx?.parallelActive) {
+      await msgContent({ type: "CLINICAL_PARALLEL_QUEUE_STOP" });
+    }
+    if (ctx?.batchActive) {
+      await msgContent({ type: "CLINICAL_CHECK_QUEUE_STOP" });
+    }
+    toast("Stopping workers after current step…", "undo", 2000);
+    const next = await refreshQueueContext();
+    updateQueueActionButtons(next);
+  } catch {
+    toast("Could not stop workers", "error");
+  }
+}
+
+async function clinicalCheckDispensary() {
+  const btn = document.getElementById("btn-clinical-check");
+  if (!btn) return;
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="animation:spin 0.8s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Clinical check…`;
+  try {
+    const scrMode = getScrMode();
+    const resp = await msgContent({ type: "RX_DISPENSARY_CLINICAL_CHECK", scrMode });
+    if (resp?.success) {
+      toast("✓ Sent to dispensary", "success");
+      setTimeout(() => doScan(), 800);
+    } else {
+      toast(resp?.error || "Could not complete clinical check", "error");
+    }
+  } catch {
+    toast("Could not connect — open the order page first", "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
 }
 
 // ── Approve & Issue Rx — opens drawer + auto-fills both steps + clicks Approve ──
@@ -1727,10 +1906,24 @@ async function doScan() {
       }
       panelBoundTabId = tabId;
       const resp = await chrome.tabs.sendMessage(tabId, { type: "GET_SCAN_DATA" });
-      handle(resp);
-    } catch {
-      toast("Could not connect — navigate to an order page first", "error");
-    }
+      if (resp?.data) {
+        handle(resp);
+        return;
+      }
+    } catch { /* fall through to queue context */ }
+    try {
+      const q = await refreshQueueContext();
+      if (q?.isQueue) {
+        const emptyEl = document.getElementById("wf-empty");
+        const contentEl = document.getElementById("wf-content");
+        if (emptyEl) emptyEl.style.display = "none";
+        if (contentEl) contentEl.style.display = "flex";
+        updateQueueActionButtons(q);
+        toast(`Queue: ${q.clinicalCheckCount ?? 0} clinical check order(s) visible`, "info", 1800);
+        return;
+      }
+    } catch {}
+    toast("Could not connect — open an order or the prescription queue", "error");
   } else {
     msgContent({ type: "GET_SCAN_DATA" }).then(handle);
   }
@@ -1776,9 +1969,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("refresh-btn")?.addEventListener("click", doScan);
   document.getElementById("scan-btn")?.addEventListener("click", doScan);
+  document.getElementById("btn-go-nhs-scr")?.addEventListener("click", () => {
+    const url = "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/app/find_patient";
+    chrome.tabs.create({ url, active: true }, () => {
+      if (chrome.runtime.lastError) toast("Could not open NHS SCR", "error");
+    });
+  });
   document.getElementById("reload-ext-btn")?.addEventListener("click", reloadExtension);
   document.getElementById("btn-bulk-approve")?.addEventListener("click", bulkApproveOrUndo);
   document.getElementById("btn-issue-rx")?.addEventListener("click", issueRx);
+  document.getElementById("btn-clinical-check")?.addEventListener("click", clinicalCheckDispensary);
+  document.getElementById("btn-process-clinical-queue")?.addEventListener("click", processClinicalCheckQueue);
+  document.getElementById("btn-stop-clinical-queue")?.addEventListener("click", stopClinicalCheckQueue);
+  document.getElementById("clinical-parallel-workers")?.addEventListener("change", () => {
+    refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
+  });
   initScrModeToggles();
   initWorkflowStepsPanel();
   document.getElementById("btn-place-hold")?.addEventListener("click", placeOnHold);
@@ -1787,8 +1992,12 @@ document.addEventListener("DOMContentLoaded", () => {
     chrome.tabs.onActivated.addListener(({ tabId }) => {
       chrome.tabs.get(tabId, (tab) => {
         if (chrome.runtime.lastError || !tab) return;
-        if (!isRxOrderUrl(tab.url)) return;
+        if (!isRxOrderUrl(tab.url)) {
+          refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
+          return;
+        }
         bindPanelToTab(tab);
+        updateQueueActionButtons({ isQueue: false });
         chrome.tabs.sendMessage(tabId, { type: "GET_SCAN_DATA" })
           .then((resp) => {
             if (!resp?.data) return;
@@ -1839,6 +2048,24 @@ document.addEventListener("DOMContentLoaded", () => {
       if (currentOrderData) {
         currentOrderData.activeTab = msg.data.activeTab;
         highlightActiveTab(msg.data.activeTab);
+      }
+    }
+    if (msg.type === "CLINICAL_CHECK_BATCH_UPDATE" && msg.data) {
+      refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
+      if (msg.event === "done") {
+        toast(`✓ Queue done — ${msg.data.processed || 0} sent to dispensary${msg.data.failed ? `, ${msg.data.failed} failed` : ""}`, msg.data.failed ? "error" : "success", 4000);
+      } else if (msg.event === "error" && msg.data.lastError) {
+        toast(`Queue stopped: ${msg.data.lastError}`, "error", 4500);
+      }
+    }
+    if (msg.type === "CLINICAL_PARALLEL_UPDATE" && msg.data) {
+      refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
+      if (msg.event === "done") {
+        toast(`✓ Parallel run finished — ${msg.data.processed || 0} sent${msg.data.failed ? `, ${msg.data.failed} failed` : ""}`, msg.data.failed ? "error" : "success", 4500);
+      } else if (msg.event === "stopped") {
+        toast("Parallel clinical check stopped", "undo", 2500);
+      } else if (msg.event === "error" && msg.data.lastError) {
+        toast(`Parallel run stopped: ${msg.data.lastError}`, "error", 4500);
       }
     }
   });

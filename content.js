@@ -78,6 +78,72 @@ function waitForEl(selector, timeoutMs = 3000, root = document) {
   });
 }
 
+async function waitForEnabledButton(selector, timeoutMs = 5000) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const b = document.querySelector(selector);
+    if (b && b.offsetParent !== null && !b.disabled) return b;
+    await sleep(80);
+  }
+  return null;
+}
+
+async function fillRxaScrSafetyStep(useScrAccessed, defaults) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const scrSelector = useScrAccessed
+    ? 'input[name="rxa_scr_status"][value="accessed"]'
+    : 'input[name="rxa_scr_status"][value="not_accessed"]';
+  const scrRadio = await waitForEl(scrSelector, 8000);
+  if (!scrRadio) return { ok: false, error: "Clinical check drawer did not open (SCR option not found)" };
+  await sleep(250);
+  clickRxaRadio(scrRadio);
+  await sleep(250);
+
+  if (useScrAccessed) {
+    const scrSummary = await waitForEl("#rxaScrSummary", 1500);
+    if (scrSummary) setFieldValue(scrSummary, defaults.scrAccessed);
+    for (const id of ["rxaScrConsentRecorded", "rxaScrMedicationsReviewed", "rxaScrAllergiesChecked", "rxaScrDiagnosesAssessed"]) {
+      const cb = document.getElementById(id);
+      if (cb && !cb.checked) setFieldValue(cb, true);
+    }
+  } else {
+    const scrReason = await waitForEl("#rxaScrNotAccessedReason", 1500);
+    if (scrReason) setFieldValue(scrReason, defaults.scr);
+  }
+  return { ok: true };
+}
+
+function fillP2uQuestionsFromExpected(root = document) {
+  const questions = root.querySelectorAll("#rxaP2uQuestions .rxa-p2u-q, .rxa-p2u-q");
+  if (!questions.length) return 0;
+  let filled = 0;
+  questions.forEach((qEl) => {
+    const expected = String(qEl.getAttribute("data-p2u-expected") || "").trim().toLowerCase();
+    if (!expected) return;
+    const field = qEl.getAttribute("data-p2u-field");
+    let radio = qEl.querySelector(`input[type="radio"][value="${expected}"]`);
+    if (!radio && field) {
+      radio = document.querySelector(`input[type="radio"][name="${field}"][value="${expected}"]`);
+    }
+    if (radio) {
+      clickRxaRadio(radio);
+      filled += 1;
+      return;
+    }
+    const candidates = [...qEl.querySelectorAll("button, label, .rxa-pill, .rxa-choice, span")];
+    for (const el of candidates) {
+      const t = el.textContent.trim().toLowerCase();
+      if (t === expected || t.startsWith(`${expected} `)) {
+        try { el.click(); } catch (_) {}
+        filled += 1;
+        return;
+      }
+    }
+  });
+  return filled;
+}
+
 // Set a form value the React/vanilla way so any change listeners fire.
 function setFieldValue(el, value) {
   if (!el) return;
@@ -295,6 +361,420 @@ async function rxApproveAutofill(userComment, scrMode) {
   } catch (e) {
     return { success: false, error: e?.message || "Auto-approve failed" };
   }
+}
+
+// Pharmacist clinical check — open Send to dispensary drawer, complete SCR step,
+// answer P2U questions (No / No / Yes from data-p2u-expected), submit.
+async function rxDispensaryClinicalCheck(scrMode) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const defaults = await getRxDefaults();
+  const useScrAccessed = scrMode === "accessed";
+  try {
+    const dispensaryAction = document.querySelector('.od2-action[data-action="dispensary"]');
+    if (!dispensaryAction) {
+      return { success: false, error: "Send to dispensary action not found on this page" };
+    }
+    dispensaryAction.click();
+
+    const p2uFirst = await waitForEl("#rxaP2uQuestions .rxa-p2u-q", 1200);
+    if (!p2uFirst) {
+      const scrStep = await fillRxaScrSafetyStep(useScrAccessed, defaults);
+      if (!scrStep.ok) return { success: false, error: scrStep.error };
+      const continueBtn = await waitForEnabledButton("#rxaContinueBtn", 6000);
+      if (!continueBtn) {
+        return { success: false, error: "Continue button not available — complete SCR checks on the drawer first" };
+      }
+      continueBtn.click();
+    }
+
+    const p2uReady = await waitForEl("#rxaP2uQuestions .rxa-p2u-q", 6000);
+    if (!p2uReady) return { success: false, error: "Pharmacy clinical check questions did not load" };
+    await sleep(200);
+    const filled = fillP2uQuestionsFromExpected();
+    if (!filled) return { success: false, error: "Could not answer P2U questions — controls not found" };
+    await sleep(200);
+
+    const finalBtn = await waitForEnabledButton("#rxaApproveBtn", 5000);
+    if (!finalBtn) return { success: false, error: "Send to dispensary button not enabled" };
+    finalBtn.click();
+
+    const swal = await autoConfirmSwal(2500);
+    if (swal.appeared && !swal.closed) {
+      return { success: false, error: "Confirm dialog did not close" };
+    }
+
+    return { success: true, message: "Sent to dispensary" };
+  } catch (e) {
+    return { success: false, error: e?.message || "Clinical check failed" };
+  }
+}
+
+const CLINICAL_CHECK_BATCH_KEY = "clinical_check_batch";
+let clinicalCheckBatchRunnerLock = false;
+
+function isPrescriptionQueuePage() {
+  return !!document.getElementById("pqx") || /\/pending-orders-new/i.test(window.location.pathname || "");
+}
+
+function getClinicalCheckQueueUrl() {
+  const u = new URL(window.location.href);
+  u.pathname = "/pending-orders-new";
+  u.search = "?tab=rx_approved";
+  return u.href;
+}
+
+function absoluteOrderUrl(pathOrUrl) {
+  if (!pathOrUrl) return null;
+  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  try { return new URL(pathOrUrl, window.location.origin).href; } catch { return null; }
+}
+
+function getClinicalCheckBatch() {
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.session.get([CLINICAL_CHECK_BATCH_KEY], (r) => {
+        resolve(r && r[CLINICAL_CHECK_BATCH_KEY] ? r[CLINICAL_CHECK_BATCH_KEY] : null);
+      });
+    } catch (_) { resolve(null); }
+  });
+}
+
+function saveClinicalCheckBatch(batch) {
+  return new Promise((resolve) => {
+    try {
+      if (batch) chrome.storage.session.set({ [CLINICAL_CHECK_BATCH_KEY]: batch }, () => resolve());
+      else chrome.storage.session.remove(CLINICAL_CHECK_BATCH_KEY, () => resolve());
+    } catch (_) { resolve(); }
+  });
+}
+
+function broadcastClinicalCheckBatch(batch, event) {
+  try {
+    chrome.runtime.sendMessage({
+      type: "CLINICAL_CHECK_BATCH_UPDATE",
+      event: event || "progress",
+      data: batch ? {
+        active: !!batch.active,
+        total: batch.orderUrls?.length || 0,
+        index: batch.index || 0,
+        processed: batch.processed || 0,
+        failed: batch.failed || 0,
+        lastError: batch.lastError || null,
+      } : null,
+    }).catch(() => {});
+  } catch (_) {}
+}
+
+async function ensureClinicalCheckQueueTab() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const tabBtn = document.querySelector('button.pq-status-tab[data-status="rx_approved"]');
+  if (!tabBtn) return false;
+  const isActive = tabBtn.classList.contains("active") || tabBtn.getAttribute("aria-current") === "page";
+  if (!isActive) {
+    tabBtn.click();
+    await sleep(1400);
+  }
+  return true;
+}
+
+function collectClinicalCheckOrderUrlsFromDom() {
+  const urls = [];
+  const seen = new Set();
+  document.querySelectorAll("#pqTableWrap tr.pq-row[data-detail-url]").forEach((tr) => {
+    const url = absoluteOrderUrl(tr.getAttribute("data-detail-url"));
+    if (url && !seen.has(url)) {
+      seen.add(url);
+      urls.push(url);
+    }
+  });
+  return urls;
+}
+
+async function waitForQueueTableChange(previousFirstPath, timeoutMs = 8000) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const first = document.querySelector("#pqTableWrap tr.pq-row[data-detail-url]")?.getAttribute("data-detail-url");
+    if (first && first !== previousFirstPath) return true;
+    await sleep(120);
+  }
+  return false;
+}
+
+async function resetClinicalCheckQueueToFirstPage() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  for (let i = 0; i < 50; i++) {
+    const prev = document.querySelector('nav[aria-label="pagination"] button.page-link.previous');
+    if (!prev || prev.disabled) break;
+    prev.click();
+    await sleep(450);
+  }
+}
+
+async function collectAllClinicalCheckOrderUrls() {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  if (!(await ensureClinicalCheckQueueTab())) return [];
+  await resetClinicalCheckQueueToFirstPage();
+  const all = [];
+  const seen = new Set();
+  for (let page = 0; page < 100; page++) {
+    collectClinicalCheckOrderUrlsFromDom().forEach((url) => {
+      if (!seen.has(url)) {
+        seen.add(url);
+        all.push(url);
+      }
+    });
+    const nextBtn = document.querySelector('nav[aria-label="pagination"] button.page-link.next');
+    if (!nextBtn || nextBtn.disabled) break;
+    const firstPath = document.querySelector("#pqTableWrap tr.pq-row[data-detail-url]")?.getAttribute("data-detail-url");
+    nextBtn.click();
+    await waitForQueueTableChange(firstPath);
+    await sleep(300);
+  }
+  return all;
+}
+
+function getQueuePageContext() {
+  const onQueue = isPrescriptionQueuePage();
+  if (!onQueue) return { isQueue: false };
+  const tabBtn = document.querySelector('button.pq-status-tab[data-status="rx_approved"]');
+  const tabActive = tabBtn && (tabBtn.classList.contains("active") || tabBtn.getAttribute("aria-current") === "page");
+  return {
+    isQueue: true,
+    clinicalCheckTabActive: !!tabActive,
+    clinicalCheckCount: collectClinicalCheckOrderUrlsFromDom().length,
+    queueUrl: getClinicalCheckQueueUrl(),
+  };
+}
+
+async function startClinicalCheckQueueBatch(scrMode, options = {}) {
+  if (!isPrescriptionQueuePage()) {
+    return { success: false, error: "Open the Prescription queue → Clinical check tab first" };
+  }
+  const existing = await getClinicalCheckBatch();
+  if (existing?.active) {
+    return { success: false, error: "A clinical check batch is already running" };
+  }
+  const parallel = await sendToBackground({ type: "CLINICAL_PARALLEL_STATUS" });
+  if (parallel?.active) {
+    return { success: false, error: "Stop the parallel worker run first" };
+  }
+  const drainUntilEmpty = options.drainUntilEmpty !== false;
+  let orderUrls = [];
+  if (!drainUntilEmpty) {
+    orderUrls = await collectAllClinicalCheckOrderUrls();
+    if (!orderUrls.length) {
+      return { success: false, error: "No orders listed under Clinical check" };
+    }
+  } else {
+    await ensureClinicalCheckQueueTab();
+    const first = collectClinicalCheckOrderUrlsFromDom()[0];
+    if (!first) {
+      return { success: false, error: "No orders listed under Clinical check" };
+    }
+    orderUrls = [first];
+  }
+  const batch = {
+    active: true,
+    queueUrl: getClinicalCheckQueueUrl(),
+    orderUrls,
+    index: 0,
+    drainUntilEmpty,
+    scrMode: scrMode === "accessed" ? "accessed" : "not_accessed",
+    processed: 0,
+    failed: 0,
+    lastError: null,
+    stopOnError: options.stopOnError !== false,
+    startedAt: Date.now(),
+  };
+  await saveClinicalCheckBatch(batch);
+  broadcastClinicalCheckBatch(batch, "started");
+  window.location.href = orderUrls[0];
+  return { success: true, total: drainUntilEmpty ? "until empty" : orderUrls.length, drainUntilEmpty };
+}
+
+async function continueClinicalCheckBatchOnQueuePage() {
+  const batch = await getClinicalCheckBatch();
+  if (!batch?.active || !batch.drainUntilEmpty) return;
+  if (clinicalCheckBatchRunnerLock) return;
+  clinicalCheckBatchRunnerLock = true;
+  try {
+    await ensureClinicalCheckQueueTab();
+    const next = collectClinicalCheckOrderUrlsFromDom()[0];
+    if (!next) {
+      batch.active = false;
+      await saveClinicalCheckBatch(batch);
+      broadcastClinicalCheckBatch(batch, "done");
+      return;
+    }
+    batch.orderUrls = [next];
+    batch.index = 0;
+    await saveClinicalCheckBatch(batch);
+    broadcastClinicalCheckBatch(batch, "progress");
+    window.location.href = next;
+  } finally {
+    clinicalCheckBatchRunnerLock = false;
+  }
+}
+
+async function stopClinicalCheckQueueBatch() {
+  const batch = await getClinicalCheckBatch();
+  if (!batch) return { success: true, message: "No batch was running" };
+  batch.active = false;
+  batch.lastError = "Stopped by user";
+  await saveClinicalCheckBatch(batch);
+  broadcastClinicalCheckBatch(batch, "stopped");
+  if (isPrescriptionQueuePage()) return { success: true };
+  window.location.href = batch.queueUrl || getClinicalCheckQueueUrl();
+  return { success: true };
+}
+
+async function continueClinicalCheckBatchOnOrderPage() {
+  if (clinicalCheckBatchRunnerLock) return;
+  const batch = await getClinicalCheckBatch();
+  if (!batch?.active) return;
+  if (!document.querySelector(".od2-tabs")) return;
+
+  const currentUrl = window.location.href.split("#")[0];
+  const expectedUrl = absoluteOrderUrl(batch.orderUrls[batch.index]);
+  if (expectedUrl && currentUrl !== expectedUrl.split("#")[0]) {
+    const idx = batch.orderUrls.findIndex((u) => absoluteOrderUrl(u)?.split("#")[0] === currentUrl);
+    if (idx >= 0) batch.index = idx;
+  }
+
+  clinicalCheckBatchRunnerLock = true;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  try {
+    await waitForEl('.od2-action[data-action="dispensary"]', 20000);
+    await sleep(400);
+    const resp = await rxDispensaryClinicalCheck(batch.scrMode);
+    if (resp?.success) {
+      batch.processed = (batch.processed || 0) + 1;
+      batch.index = (batch.index || 0) + 1;
+      batch.lastError = null;
+      if (batch.index < batch.orderUrls.length) {
+        await saveClinicalCheckBatch(batch);
+        broadcastClinicalCheckBatch(batch, "progress");
+        window.location.href = batch.orderUrls[batch.index];
+        return;
+      }
+      if (batch.drainUntilEmpty) {
+        await saveClinicalCheckBatch(batch);
+        broadcastClinicalCheckBatch(batch, "progress");
+        window.location.href = batch.queueUrl || getClinicalCheckQueueUrl();
+        return;
+      }
+      batch.active = false;
+      await saveClinicalCheckBatch(batch);
+      broadcastClinicalCheckBatch(batch, "done");
+      window.location.href = batch.queueUrl || getClinicalCheckQueueUrl();
+      return;
+    }
+
+    batch.failed = (batch.failed || 0) + 1;
+    batch.lastError = resp?.error || "Clinical check failed";
+    if (batch.stopOnError) {
+      batch.active = false;
+      await saveClinicalCheckBatch(batch);
+      broadcastClinicalCheckBatch(batch, "error");
+      window.location.href = batch.queueUrl || getClinicalCheckQueueUrl();
+      return;
+    }
+    batch.index = (batch.index || 0) + 1;
+    if (batch.index < batch.orderUrls.length) {
+      await saveClinicalCheckBatch(batch);
+      broadcastClinicalCheckBatch(batch, "progress");
+      window.location.href = batch.orderUrls[batch.index];
+    } else {
+      batch.active = false;
+      await saveClinicalCheckBatch(batch);
+      broadcastClinicalCheckBatch(batch, "done");
+      window.location.href = batch.queueUrl || getClinicalCheckQueueUrl();
+    }
+  } finally {
+    clinicalCheckBatchRunnerLock = false;
+  }
+}
+
+let parallelClinicalWorkerLock = false;
+
+function sendToBackground(payload) {
+  return new Promise((resolve) => {
+    try {
+      chrome.runtime.sendMessage(payload, (r) => {
+        void chrome.runtime.lastError;
+        resolve(r || {});
+      });
+    } catch (_) { resolve({}); }
+  });
+}
+
+async function runParallelClinicalWorkerOnce() {
+  if (parallelClinicalWorkerLock) return;
+  const assign = await sendToBackground({ type: "CLINICAL_PARALLEL_GET_TAB_ASSIGNMENT" });
+  if (!assign.active) return;
+
+  if (document.querySelector(".od2-tabs")) {
+    if (!assign.url) return;
+    const target = absoluteOrderUrl(assign.url)?.split("#")[0];
+    const current = window.location.href.split("#")[0];
+    if (target && current !== target) {
+      window.location.href = assign.url;
+      return;
+    }
+    parallelClinicalWorkerLock = true;
+    try {
+      await waitForEl('.od2-action[data-action="dispensary"]', 20000);
+      await new Promise((r) => setTimeout(r, 400));
+      const resp = await rxDispensaryClinicalCheck(assign.scrMode || "not_accessed");
+      const next = await sendToBackground({
+        type: "CLINICAL_PARALLEL_COMPLETE",
+        success: !!resp?.success,
+        error: resp?.error,
+      });
+      if (next?.url) window.location.href = next.url;
+    } finally {
+      parallelClinicalWorkerLock = false;
+    }
+    return;
+  }
+
+  if (isPrescriptionQueuePage()) {
+    const claim = await sendToBackground({ type: "CLINICAL_PARALLEL_CLAIM" });
+    if (claim?.url) window.location.href = claim.url;
+  }
+}
+
+async function startParallelClinicalCheckWorkers(scrMode, workerCount) {
+  if (!isPrescriptionQueuePage()) {
+    return { success: false, error: "Open the Prescription queue → Clinical check tab first" };
+  }
+  const status = await sendToBackground({ type: "CLINICAL_PARALLEL_STATUS" });
+  if (status.active) return { success: false, error: "Parallel clinical check is already running" };
+  const batch = await getClinicalCheckBatch();
+  if (batch?.active) return { success: false, error: "Stop the single-tab queue run first" };
+  await ensureClinicalCheckQueueTab();
+  const urls = await collectAllClinicalCheckOrderUrls();
+  if (!urls.length) return { success: false, error: "No orders listed under Clinical check" };
+  return sendToBackground({
+    type: "CLINICAL_PARALLEL_START",
+    urls,
+    scrMode: scrMode === "accessed" ? "accessed" : "not_accessed",
+    workerCount,
+    queueUrl: getClinicalCheckQueueUrl(),
+  });
+}
+
+function bootPrescriptionQueuePage() {
+  getClinicalCheckBatch().then((batch) => {
+    if (batch?.active) {
+      broadcastClinicalCheckBatch(batch, "progress");
+      setTimeout(() => { continueClinicalCheckBatchOnQueuePage().catch(() => {}); }, 700);
+    }
+  });
+  sendToBackground({ type: "CLINICAL_PARALLEL_STATUS" }).then((st) => {
+    if (st?.active) setTimeout(() => { runParallelClinicalWorkerOnce().catch(() => {}); }, 800);
+  });
 }
 
 // ── Place order on hold: clicks the on-page Hold action, waits for the
@@ -1110,6 +1590,12 @@ function scrapeOrderData() {
   });
 
   enrichTreatmentGapData(data);
+
+  data.pageActions = {
+    approve: !!document.querySelector('.od2-action[data-action="approve"]'),
+    dispensary: !!document.querySelector('.od2-action[data-action="dispensary"]'),
+    hold: !!document.querySelector('.od2-action[data-action="hold"]'),
+  };
 
   return data;
 }
@@ -1930,6 +2416,63 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === "RX_DISPENSARY_CLINICAL_CHECK") {
+    rxDispensaryClinicalCheck(message.scrMode).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "GET_QUEUE_CONTEXT") {
+    Promise.all([
+      getClinicalCheckBatch(),
+      sendToBackground({ type: "CLINICAL_PARALLEL_STATUS" }),
+    ]).then(([batch, parallel]) => {
+      sendResponse({
+        success: true,
+        ...getQueuePageContext(),
+        batchActive: !!(batch && batch.active),
+        parallelActive: !!(parallel && parallel.active),
+        parallel: parallel?.active ? {
+          pending: parallel.pending || 0,
+          processed: parallel.processed || 0,
+          failed: parallel.failed || 0,
+          workers: parallel.workers || 0,
+        } : null,
+        batch: batch ? {
+          total: batch.orderUrls?.length || 0,
+          index: batch.index || 0,
+          processed: batch.processed || 0,
+          failed: batch.failed || 0,
+        } : null,
+      });
+    });
+    return true;
+  }
+
+  if (message.type === "CLINICAL_CHECK_QUEUE_START") {
+    startClinicalCheckQueueBatch(message.scrMode, message.options || {}).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_CHECK_QUEUE_STOP") {
+    stopClinicalCheckQueueBatch().then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_QUEUE_START") {
+    startParallelClinicalCheckWorkers(message.scrMode, message.workerCount).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_QUEUE_STOP") {
+    sendToBackground({ type: "CLINICAL_PARALLEL_STOP" }).then(sendResponse);
+    return true;
+  }
+
+  if (message.type === "CLINICAL_PARALLEL_WORK") {
+    runParallelClinicalWorkerOnce().then(() => sendResponse({ success: true }));
+    return true;
+  }
+
   // ── Place on Hold: clicks the on-page Hold action, waits for the swal2
   //    modal, fills the reason textarea, ticks any document checkboxes the
   //    user selected in our side-panel modal, then clicks Confirm.
@@ -1977,6 +2520,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 function boot() {
+  if (isPrescriptionQueuePage()) {
+    bootPrescriptionQueuePage();
+    setTimeout(boot, 2000);
+    return;
+  }
+
   if (!document.querySelector(".od2-tabs")) {
     // Keep checking if we land on an order page later
     setTimeout(boot, 2000);
@@ -1987,6 +2536,10 @@ function boot() {
   detectTabCompletionChanges();
   detectActiveTabChanges();
   try { installDocModalEnhancements(); } catch {}
+  setTimeout(() => {
+    continueClinicalCheckBatchOnOrderPage().catch(() => {});
+    runParallelClinicalWorkerOnce().catch(() => {});
+  }, 600);
 
   // Periodically rescan in case data changes
   if (scanInterval) clearInterval(scanInterval);

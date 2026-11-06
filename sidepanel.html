@@ -229,6 +229,23 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
     /* ── Workflow View ── */
     #view-workflow { padding: 18px 16px 22px; gap: 16px; }
 
+    .btn-nhs-scr {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; margin: 0 0 2px; padding: 11px 12px;
+      min-height: 54px; border-radius: 8px; cursor: pointer;
+      background: #efe8ff; color: #5b21b6;
+      border: 1px solid #ddd6fe;
+      font-size: 13px; font-weight: 600; line-height: 1.2;
+      text-align: left;
+    }
+    .btn-nhs-scr:hover { background: #e4d9ff; }
+    .btn-nhs-scr:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+    .btn-nhs-scr .ico {
+      display: flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; min-width: 28px; border-radius: 6px;
+      background: #ddd6fe; color: #6d28d9; font-size: 16px;
+    }
+
     .progress-wrap {
       background: var(--white); border: 1px solid var(--border);
       border-radius: 14px; padding: 16px 18px;
@@ -307,6 +324,84 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
     }
     .btn-bulk:focus-visible { box-shadow: var(--focus-ring); outline: none; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .btn-clinical-check {
+      width: 100%;
+      margin-top: 10px;
+      padding: 11px 14px;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 650;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #fff;
+      background: linear-gradient(135deg, #0d9488 0%, #059669 100%);
+      box-shadow: 0 4px 12px rgba(13, 148, 136, 0.28);
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+    }
+    .btn-clinical-check:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 14px rgba(13, 148, 136, 0.32); }
+    .btn-clinical-check:disabled { opacity: 0.6; cursor: not-allowed; }
+    .btn-clinical-check.is-hidden { display: none !important; }
+    .btn-process-clinical-queue {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px 14px;
+      border: 1px dashed rgba(13, 148, 136, 0.45);
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 650;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #0f766e;
+      background: rgba(13, 148, 136, 0.08);
+    }
+    .btn-process-clinical-queue:hover:not(:disabled) { background: rgba(13, 148, 136, 0.14); }
+    .btn-process-clinical-queue:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-process-clinical-queue.is-hidden { display: none !important; }
+    .btn-stop-clinical-queue {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #991b1b;
+      background: #fee2e2;
+    }
+    .btn-stop-clinical-queue.is-hidden { display: none !important; }
+    .clinical-queue-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      width: 100%;
+    }
+    .clinical-queue-toolbar.is-hidden { display: none !important; }
+    .clinical-queue-toolbar label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      white-space: nowrap;
+    }
+    .clinical-queue-toolbar select {
+      flex: 0 0 auto;
+      padding: 6px 8px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 12px;
+      background: #fff;
+    }
+    .btn-issue-rx.is-hidden { display: none !important; }
+    .scr-mode-wrap.is-hidden { display: none !important; }
+
     .btn-issue-rx {
       display: flex; align-items: center; justify-content: center; gap: 8px;
       margin: 8px 2px 6px; padding: 14px 16px;
@@ -1079,6 +1174,10 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       <button class="btn-scan" id="scan-btn">Scan Page</button>
     </div>
     <div id="wf-content" style="display:none; flex:1; padding:12px; flex-direction:column; gap:8px;">
+      <button id="btn-go-nhs-scr" class="btn-nhs-scr" type="button">
+        <span class="ico" aria-hidden="true">→</span>
+        <span>Go to NHS SCR</span>
+      </button>
       <div class="workflow-steps-section" id="workflow-steps-section">
         <div class="progress-wrap" id="progress-wrap-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="steps-list" title="Show / hide prescription steps">
           <div class="progress-top">
@@ -1102,6 +1201,25 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         Approve &amp; Issue Rx
       </button>
+      <button id="btn-clinical-check" class="btn-clinical-check is-hidden" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>
+        Clinical check &amp; send to dispensary
+      </button>
+      <div id="clinical-queue-toolbar" class="clinical-queue-toolbar is-hidden">
+        <label for="clinical-parallel-workers">Workers</label>
+        <select id="clinical-parallel-workers" title="Number of Chrome tabs processing orders in parallel">
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5" selected>5</option>
+          <option value="6">6</option>
+        </select>
+      </div>
+      <button id="btn-process-clinical-queue" class="btn-process-clinical-queue is-hidden" type="button">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>
+        <span>Run parallel clinical check</span>
+      </button>
+      <button id="btn-stop-clinical-queue" class="btn-stop-clinical-queue is-hidden" type="button">Stop workers</button>
       <div class="scr-mode-wrap">
         <span class="scr-mode-label">Summary Care Record</span>
         <div class="scr-mode-toggle">
