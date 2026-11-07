@@ -1,17 +1,7 @@
 <!DOCTYPE html>
 <html>
-<head><script>(function(){try{
-var _mgL=[];
-if(!window.chrome)window.chrome={};
-if(!window.chrome.runtime)window.chrome.runtime={};
-if(!window.chrome.runtime.onMessage)window.chrome.runtime.onMessage={addListener:function(fn){if(typeof fn==='function')_mgL.push(fn);},removeListener:function(fn){var i=_mgL.indexOf(fn);if(i>=0)_mgL.splice(i,1);},hasListener:function(fn){return _mgL.indexOf(fn)>=0;}};
-if(!window.chrome.runtime.sendMessage)window.chrome.runtime.sendMessage=function(){return Promise.resolve();};
-if(!window.chrome.runtime.getURL)window.chrome.runtime.getURL=function(p){return p;};
-if(!window.chrome.runtime.openOptionsPage)window.chrome.runtime.openOptionsPage=function(){try{window.open('/extension2/options.html','_blank');}catch(e){}};
-if(!window.chrome.storage)window.chrome.storage={};
-if(!window.chrome.storage.sync)window.chrome.storage.sync={get:function(keys,cb){try{var out={};if(keys&&typeof keys==='object'&&!Array.isArray(keys))out=Object.assign({},keys);cb&&cb(out);}catch(e){try{cb&&cb({});}catch(_){}}},set:function(_o,cb){try{cb&&cb();}catch(e){}}};
-window.addEventListener('message',function(ev){try{if(ev.origin!==window.location.origin)return;if(window.parent&&ev.source!==window.parent)return;var d=ev.data;if(!d||d.__mg_to!=='panel'||!d.__mg_event||!d.message)return;for(var i=0;i<_mgL.length;i++){try{_mgL[i](d.message,{id:'mediguard-pwa-page'},function(){});}catch(e){}}}catch(e){}});
-}catch(e){}})();</script>
+<head>
+  <script src="sidepanel-boot.js"></script>
   <meta charset="UTF-8">
   <title>MediGuard AI</title>
   <style>
@@ -245,6 +235,105 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
       width: 28px; height: 28px; min-width: 28px; border-radius: 6px;
       background: #ddd6fe; color: #6d28d9; font-size: 16px;
     }
+    .name-mismatch {
+      display: none;
+      margin: 0 16px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 12.5px;
+      font-weight: 650;
+      line-height: 1.4;
+    }
+    .name-mismatch.is-on { display: block; }
+    .scr-scan {
+      display: none;
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+    .scr-scan.is-on { display: block; }
+    .scr-scan-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+      margin-bottom: 8px;
+    }
+    .scr-scan-title { font-size: 12px; font-weight: 750; color: #0f172a; }
+    .scr-scan-count { font-size: 11px; font-weight: 700; color: #64748b; }
+    .scr-scan-products { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+    .scr-scan-pill {
+      font-size: 10px; font-weight: 750; padding: 2px 6px; border-radius: 999px;
+      background: #ecfdf5; color: #047857;
+    }
+    .scr-scan-pill.is-reject { background: #fef2f2; color: #b91c1c; }
+    .scr-scan-pill.is-flag, .scr-scan-pill.is-review, .scr-scan-pill.is-cap_9mg { background: #fff7ed; color: #c2410c; }
+    .scr-scan-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow: auto; }
+    .scr-scan-item { padding: 8px; border-radius: 8px; background: #f8fafc; }
+    .scr-scan-item.is-reject { background: #fef2f2; }
+    .scr-scan-item.is-flag { background: #fff7ed; }
+    .scr-scan-item strong { display: block; font-size: 12px; line-height: 1.3; }
+    .scr-scan-item span { display: block; margin-top: 2px; font-size: 11px; color: #475569; line-height: 1.35; }
+    .scr-scan-empty { font-size: 12px; color: #047857; font-weight: 650; }
+
+    .scr-condition {
+      margin: 12px 16px 0;
+      padding: 12px 12px 10px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+    .scr-select { position: relative; margin-top: 8px; }
+    .scr-select-btn {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; min-height: 44px; padding: 8px 12px;
+      border-radius: 12px; cursor: pointer; text-align: left;
+      background: #f8fafc; border: 1px solid #e2e8f0; color: #0f172a;
+      font-size: 13.5px; font-weight: 650;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+    .scr-select-btn:hover { border-color: #cbd5e1; background: #fff; }
+    .scr-select-btn:focus-visible,
+    .scr-select.is-open .scr-select-btn {
+      outline: none; border-color: #6ee7b7;
+      box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+    }
+    .scr-select-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      background: #ecfdf5; font-size: 15px; flex-shrink: 0;
+    }
+    .scr-select-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .scr-select-kicker {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+      text-transform: uppercase; color: #94a3b8;
+    }
+    .scr-select-value { font-size: 13.5px; font-weight: 700; color: #0f172a; }
+    .scr-select-chev {
+      width: 16px; height: 16px; color: #64748b; flex-shrink: 0;
+      transition: transform 0.16s ease;
+    }
+    .scr-select.is-open .scr-select-chev { transform: rotate(180deg); }
+    .scr-select-menu {
+      position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px);
+      margin: 0; padding: 6px; list-style: none;
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(15,23,42,0.12);
+    }
+    .scr-select-menu[hidden] { display: none; }
+    .scr-select-option {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 9px 10px; border: 0; border-radius: 8px;
+      background: transparent; cursor: pointer; text-align: left;
+      font-size: 13px; font-weight: 600; color: #334155;
+    }
+    .scr-select-option:hover { background: #f8fafc; }
+    .scr-select-option.is-active { background: #ecfdf5; color: #047857; }
+    .scr-select-option span:first-child { width: 1.4em; text-align: center; }
 
     .progress-wrap {
       background: var(--white); border: 1px solid var(--border);
@@ -1100,26 +1189,7 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
     .btn-hold:focus-visible { box-shadow: var(--focus-ring); outline: none; }
 
   </style>
-  <script>
-    // Apply the user's UI zoom preference (80–150%) as early as possible so
-    // the sidepanel renders at the chosen size without a visible reflow.
-    (function () {
-      try {
-        var apply = function (z) {
-          var n = parseInt(z, 10);
-          if (!isFinite(n)) n = 100;
-          if (n < 80) n = 80; if (n > 200) n = 200;
-          document.documentElement.style.zoom = (n / 100);
-        };
-        if (typeof chrome !== "undefined" && chrome.storage && chrome.storage.sync) {
-          chrome.storage.sync.get(["ui_zoom"], function (r) { apply(r && r.ui_zoom); });
-          chrome.storage.onChanged.addListener(function (changes, area) {
-            if (area === "sync" && changes.ui_zoom) apply(changes.ui_zoom.newValue);
-          });
-        }
-      } catch (e) { /* ignore */ }
-    })();
-  </script>
+  <script src="sidepanel-zoom.js"></script>
 </head>
 <body>
 
@@ -1163,6 +1233,26 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
     </div>
   </div>
 
+  <div id="name-mismatch" class="name-mismatch" role="alert">
+    <strong>Names don't match.</strong>
+    <span id="name-mismatch-detail"></span>
+    Refresh the page.
+  </div>
+
+  <section class="scr-condition" aria-label="SCR condition">
+    <div class="scr-select" id="scr-condition">
+      <button type="button" class="scr-select-btn" id="scr-condition-toggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="scr-condition-menu">
+        <span class="scr-select-icon" id="scr-condition-icon" aria-hidden="true">⚖️</span>
+        <span class="scr-select-copy">
+          <span class="scr-select-kicker">SCR condition</span>
+          <span class="scr-select-value" id="scr-condition-value">Weight Loss</span>
+        </span>
+        <svg class="scr-select-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <ul class="scr-select-menu" id="scr-condition-menu" role="listbox" hidden></ul>
+    </div>
+  </section>
+
   <!-- WORKFLOW -->
   <div class="pview active" id="view-workflow">
     <div class="empty" id="wf-empty">
@@ -1178,6 +1268,15 @@ window.addEventListener('message',function(ev){try{if(ev.origin!==window.locatio
         <span class="ico" aria-hidden="true">→</span>
         <span>Go to NHS SCR</span>
       </button>
+      <section id="scr-scan" class="scr-scan" aria-live="polite">
+        <div class="scr-scan-head">
+          <div class="scr-scan-title" id="scr-scan-title">SCR keyword scan</div>
+          <div class="scr-scan-count" id="scr-scan-count"></div>
+        </div>
+        <div class="scr-scan-products" id="scr-scan-products"></div>
+        <div class="scr-scan-empty" id="scr-scan-empty" hidden>No keyword matches.</div>
+        <ul class="scr-scan-list" id="scr-scan-list"></ul>
+      </section>
       <div class="workflow-steps-section" id="workflow-steps-section">
         <div class="progress-wrap" id="progress-wrap-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="steps-list" title="Show / hide prescription steps">
           <div class="progress-top">

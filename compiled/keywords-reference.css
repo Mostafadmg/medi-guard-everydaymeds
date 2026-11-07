@@ -1,0 +1,310 @@
+/**
+ * Screening keywords reference modal
+ */
+
+body.edm-kw-modal-open {
+  overflow: hidden;
+}
+
+.edm-kw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(4px);
+}
+
+.edm-kw-modal {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 920px;
+  max-height: min(90vh, 820px);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.edm-kw-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.edm-kw-modal__header-text h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.edm-kw-modal__header-text p {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.edm-kw-modal__close {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 8px;
+  background: #fff;
+  color: #64748b;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.edm-kw-modal__close:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.edm-kw-modal__search-wrap {
+  position: relative;
+  padding: 0.875rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.edm-kw-modal__search-icon {
+  position: absolute;
+  left: 2rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.edm-kw-modal__search {
+  width: 100%;
+  padding: 0.625rem 0.875rem 0.625rem 2.25rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 0.875rem;
+}
+
+.edm-kw-modal__search:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.edm-kw-modal__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem 1.5rem 1.25rem;
+}
+
+.edm-kw-modal__footer {
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  font-size: 0.75rem;
+  color: #64748b;
+  background: #f8fafc;
+}
+
+.edm-kw-modal__footer code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.6875rem;
+}
+
+.edm-kw-summary {
+  margin-bottom: 1rem;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.edm-kw-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.edm-kw-rule {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.edm-kw-rule__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.edm-kw-rule__title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.edm-kw-rule__id {
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+}
+
+.edm-kw-rule__name {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.edm-kw-rule__category {
+  flex-shrink: 0;
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.edm-kw-rule__category--condition {
+  color: #5b21b6;
+  background: #ede9fe;
+}
+
+.edm-kw-rule__category--medication {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.edm-kw-rule__chips,
+.edm-kw-groups {
+  padding: 0.875rem 1rem;
+}
+
+.edm-kw-rule__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.edm-kw-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.edm-kw-group {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.edm-kw-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.edm-kw-group__title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.edm-kw-group__count {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.edm-kw-group__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.625rem 0.75rem;
+  background: rgba(255, 255, 255, 0.65);
+}
+
+/* Category tints */
+.edm-kw-group--kidney .edm-kw-group__head { background: #dbeafe; color: #1e40af; }
+.edm-kw-group--oncology .edm-kw-group__head { background: #ede9fe; color: #5b21b6; }
+.edm-kw-group--bariatric .edm-kw-group__head { background: #ffedd5; color: #c2410c; }
+.edm-kw-group--endocrine .edm-kw-group__head { background: #ccfbf1; color: #0f766e; }
+.edm-kw-group--gi-liver .edm-kw-group__head { background: #fef3c7; color: #b45309; }
+.edm-kw-group--mental-health .edm-kw-group__head { background: #e0e7ff; color: #4338ca; }
+.edm-kw-group--cardiovascular .edm-kw-group__head { background: #fee2e2; color: #b91c1c; }
+.edm-kw-group--rheumatology .edm-kw-group__head { background: #fce7f3; color: #be185d; }
+.edm-kw-group--haematology .edm-kw-group__head { background: #ffe4e6; color: #be123c; }
+.edm-kw-group--neurology .edm-kw-group__head { background: #cffafe; color: #0e7490; }
+.edm-kw-group--infectious .edm-kw-group__head { background: #dcfce7; color: #15803d; }
+.edm-kw-group--thrombosis .edm-kw-group__head { background: #fecaca; color: #991b1b; }
+.edm-kw-group--musculoskeletal .edm-kw-group__head { background: #f1f5f9; color: #475569; }
+.edm-kw-group--pregnancy .edm-kw-group__head { background: #fbcfe8; color: #9d174d; }
+
+.edm-kw-chip {
+  display: inline-flex;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  font-size: 0.75rem;
+  color: #334155;
+  line-height: 1.3;
+}
+
+.edm-kw-rule__count {
+  margin: 0;
+  padding: 0.5rem 1rem 0.75rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+.edm-kw-empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #64748b;
+}
+
+.edm-keywords-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edm-keywords-trigger:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}

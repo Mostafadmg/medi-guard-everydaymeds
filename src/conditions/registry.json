@@ -1,0 +1,63 @@
+[
+  {
+    "id": "weight-loss",
+    "label": "Weight Loss",
+    "description": "Mounjaro, Wegovy injection, Wegovy tablets, Foundayo — EDM-WL-01 v2.3 §9.8 A–E contraindications",
+    "icon": "⚖️",
+    "default": true,
+    "rulesFile": "src/conditions/weight-loss/rules.json",
+    "keywordGroupsFile": "src/conditions/weight-loss/keyword-groups.json",
+    "metaFile": "src/conditions/weight-loss/meta.json",
+    "markdownFile": "src/conditions/md-rules/weight-loss.md"
+  },
+  {
+    "id": "period-delay",
+    "label": "Period Delay",
+    "description": "Norethisterone / Utovlan period delay contraindications",
+    "icon": "📅",
+    "rulesFile": "src/conditions/period-delay/rules.json",
+    "keywordGroupsFile": "src/conditions/period-delay/keyword-groups.json",
+    "metaFile": "src/conditions/period-delay/meta.json",
+    "markdownFile": "src/conditions/md-rules/period-delay.md"
+  },
+  {
+    "id": "erectile-dysfunction",
+    "label": "Erectile Dysfunction",
+    "description": "Sildenafil, Tadalafil, Vardenafil and PDE5 inhibitor contraindications",
+    "icon": "💊",
+    "rulesFile": "src/conditions/erectile-dysfunction/rules.json",
+    "keywordGroupsFile": "src/conditions/erectile-dysfunction/keyword-groups.json",
+    "metaFile": "src/conditions/erectile-dysfunction/meta.json",
+    "markdownFile": "src/conditions/md-rules/erectile-dysfunction.md"
+  },
+  {
+    "id": "migraine",
+    "label": "Migraine",
+    "description": "Triptans and rimegepant / Vydura acute migraine contraindications",
+    "icon": "🧠",
+    "rulesFile": "src/conditions/migraine/rules.json",
+    "keywordGroupsFile": "src/conditions/migraine/keyword-groups.json",
+    "metaFile": "src/conditions/migraine/meta.json",
+    "markdownFile": "src/conditions/md-rules/migraine.md"
+  },
+  {
+    "id": "premature-ejaculation",
+    "label": "Premature Ejaculation",
+    "description": "Dapoxetine / Priligy premature ejaculation contraindications (EDM-PE-01)",
+    "icon": "🩺",
+    "rulesFile": "src/conditions/premature-ejaculation/rules.json",
+    "keywordGroupsFile": "src/conditions/premature-ejaculation/keyword-groups.json",
+    "metaFile": "src/conditions/premature-ejaculation/meta.json",
+    "markdownFile": "src/conditions/md-rules/premature-ejaculation.md"
+  },
+  {
+    "id": "hair-loss",
+    "label": "Hair Loss",
+    "description": "Finasteride 1 mg and topical minoxidil 5% male-pattern hair loss (EDM-HL-01)",
+    "icon": "💇",
+    "rulesFile": "src/conditions/hair-loss/rules.json",
+    "keywordGroupsFile": "src/conditions/hair-loss/keyword-groups.json",
+    "metaFile": "src/conditions/hair-loss/meta.json",
+    "markdownFile": "src/conditions/md-rules/hair-loss.md"
+  }
+]

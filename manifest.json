@@ -14,6 +14,7 @@
   "host_permissions": [
     "https://rx.everydaymeds.co.uk/*",
     "https://portal.spineservices.nhs.uk/*",
+    "https://national-care-records-service.nhs.uk/*",
     "https://*.replit.app/*",
     "https://*.replit.dev/*",
     "https://api.openai.com/*",
@@ -45,13 +46,33 @@
     },
     {
       "matches": [
-        "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/*"
+        "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/*",
+        "https://national-care-records-service.nhs.uk/nationalcarerecordsservice/*"
       ],
-      "js": ["scr-portal.js"],
+      "js": ["scr-portal.js", "scr/capture.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/*",
+        "https://national-care-records-service.nhs.uk/nationalcarerecordsservice/*"
+      ],
+      "js": ["scr/scan-page.js"],
+      "type": "module",
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
+    {
+      "resources": [
+        "scr/*",
+        "compiled/*",
+        "compiled/advice/*",
+        "compiled/advice/rules/*",
+        "src/conditions/*"
+      ],
+      "matches": ["<all_urls>"]
+    },
     {
       "resources": ["macros.json"],
       "matches": [

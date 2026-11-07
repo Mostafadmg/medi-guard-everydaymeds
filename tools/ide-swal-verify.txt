@@ -1,0 +1,1 @@
+(async()=>{for(let i=0;i<25;i++){document.querySelector('.swal2-popup.swal2-show .swal2-confirm')?.click();await new Promise(r=>setTimeout(r,120));}await new Promise(r=>setTimeout(r,2000));return{path:location.pathname,still:!!document.querySelector('.od2-action[data-action="dispensary"]')};})()

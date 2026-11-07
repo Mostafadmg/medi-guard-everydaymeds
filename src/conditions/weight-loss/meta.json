@@ -1,0 +1,634 @@
+{
+  "conditionId": "weight-loss",
+  "label": "Weight Loss",
+  "protocol": "EDM-WL-01 v2.3 DRAFT (Foundayo) — §7.10, §7.11, §9.8, §12",
+  "products": [
+    "Mounjaro",
+    "Wegovy injection",
+    "Wegovy tablets",
+    "Foundayo"
+  ],
+  "productKeys": [
+    "mounjaro",
+    "wegovy_inj",
+    "wegovy_tab",
+    "foundayo"
+  ],
+  "notes": [
+    "Every rule follows the §9.8 A–E category: A rejects; B rejects inside its window; C/D hold; E escalates; knowledge-base “prescribe” items have no rule.",
+    "Medicines (insulin, oral diabetic, NTI, orlistat): repeat list or issued within 3 months → reject; older → confirm stopped; undated → hold.",
+    "Surgery (bariatric, cholecystectomy): within 12 months → reject; older → may prescribe; undated → hold (Macro 1).",
+    "Items not in EDM-WL-01 (VTE/DOACs, haematology, MS, hypercalcaemia, flecainide) are review flags — confirm against EDM-WM-CI-01.",
+    "Strong negation drops a hit; uncertain wording keeps it as review. MTC/MEN2 family history still rejects."
+  ],
+  "ruleGuide": [
+    {
+      "id": "WL-PANCREATITIS",
+      "name": "Pancreatitis or pancreatic insufficiency",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Pancreatitis",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-EATING-DISORDER",
+      "name": "Eating disorder (diagnosed)",
+      "category": "condition",
+      "summary": "§9.8 Cat A / §12.1 — Eating disorders",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-EATING-POSSIBLE",
+      "name": "Possible disordered eating (not a diagnosis)",
+      "category": "condition",
+      "summary": "§12.1 / §12.5 — Disordered eating; knowledge base: binge eating without diagnosis",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-T1DM",
+      "name": "Type 1 diabetes / LADA",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Type 1 diabetes",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-DKA",
+      "name": "Diabetic ketoacidosis history",
+      "category": "condition",
+      "summary": "§9.8 Cat A rationale (T1DM) — review",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-HYPOGLYCAEMIA",
+      "name": "Hypoglycaemia",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Hypoglycaemia (REJECT)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-LIVER-SEVERE",
+      "name": "Severe liver disease",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Severe liver conditions",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-ENDO-SECONDARY",
+      "name": "Endocrine cause of obesity",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Endocrine disorders",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-GI-ABSOLUTE",
+      "name": "IBD, gastroparesis or stoma",
+      "category": "condition",
+      "summary": "§9.8 Cat A — GI conditions",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MED-IBD",
+      "name": "IBD medicine (mesalazine etc.)",
+      "category": "medication",
+      "summary": "§9.8 Cat A — GI conditions (medicine as signal)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-MALABSORPTION",
+      "name": "Chronic malabsorption",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Chronic malabsorption (also listed under Cat A GI conditions)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-MTC-MEN2",
+      "name": "Medullary thyroid cancer or MEN2 (personal or family)",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Thyroid disorders & cancer",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-LONG-QT",
+      "name": "Long QT syndrome",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Long QT (REJECT)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-PKD",
+      "name": "Polycystic kidney disease",
+      "category": "condition",
+      "summary": "EDM SCR SOP §11.1 Cat A; §9.8 knowledge base (kidney cysts “if not PKD”)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-SICKLE-CELL",
+      "name": "Sickle cell disease",
+      "category": "condition",
+      "summary": "EDM SCR SOP §11.1 Cat A (EDM-WM-CI-01)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-NAION",
+      "name": "NAION (ischaemic optic neuropathy)",
+      "category": "condition",
+      "summary": "§9.8 Cat A — NAION; §7.10",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-HF-SEVERE",
+      "name": "Heart failure NYHA IV",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Stage 4 heart failure",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-CKD-SEVERE",
+      "name": "Severe CKD (stage 4–5, dialysis)",
+      "category": "condition",
+      "summary": "§9.8 Cat A — Severe kidney disease (eGFR <30)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-OBS-EGFR",
+      "name": "eGFR result",
+      "category": "observation",
+      "summary": "§9.8 Cat A — eGFR <30",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MED-INSULIN",
+      "name": "Insulin",
+      "category": "medication",
+      "summary": "§9.8 Cat A/B — Insulin (§7.11: outside this service)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MED-DIABETES-ORAL",
+      "name": "Oral diabetes medicine (excluding metformin)",
+      "category": "medication",
+      "summary": "§9.8 Cat A/B — Oral diabetic medications",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MED-NTI",
+      "name": "Narrow-therapeutic-index medicine",
+      "category": "medication",
+      "summary": "§9.8 Cat A/B — Excluded NTI medications",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MED-ORLISTAT",
+      "name": "Orlistat",
+      "category": "medication",
+      "summary": "§9.8 Cat B — Orlistat",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MED-MYSIMBA",
+      "name": "Mysimba (naltrexone/bupropion)",
+      "category": "medication",
+      "summary": "Service extension — not named in EDM-WL-01 (mirrors the orlistat rule)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-GLP1-EXISTING",
+      "name": "GLP-1 already on record",
+      "category": "medication",
+      "summary": "§6.5 / §9.8 — Active NHS GLP-1 before transfer or step-up",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-BARIATRIC",
+      "name": "Bariatric surgery",
+      "category": "condition",
+      "summary": "§9.8 Cat B — Bariatric surgery (<12 months)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-CHOLECYSTECTOMY",
+      "name": "Cholecystectomy",
+      "category": "condition",
+      "summary": "§9.8 Cat B — Gallbladder removal (<12 months)",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-GALLSTONES",
+      "name": "Gallstones / cholecystitis",
+      "category": "condition",
+      "summary": "§9.8 Cat C — Gallstones / cholecystitis",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-HF",
+      "name": "Heart failure (stage not stated)",
+      "category": "condition",
+      "summary": "§9.8 Cat C — Heart failure, stage unknown",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-CKD",
+      "name": "Chronic kidney disease (eGFR not stated)",
+      "category": "condition",
+      "summary": "§9.8 Cat C — CKD, eGFR unknown",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-RETINOPATHY-ACTIVE",
+      "name": "Maculopathy / active diabetic eye disease",
+      "category": "condition",
+      "summary": "§9.8 Cat A / knowledge base — Maculopathy; active diabetic retinopathy",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-RETINOPATHY",
+      "name": "Retinopathy or macular condition (type to confirm)",
+      "category": "condition",
+      "summary": "§9.8 Cat C — Retinopathy: type matters",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-CANCER",
+      "name": "Cancer diagnosis or treatment",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Cancer (active treatment: Cat A)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-PREGNANCY",
+      "name": "Pregnancy",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Pregnancy, breastfeeding & conception",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-BREASTFEEDING",
+      "name": "Breastfeeding",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Pregnancy, breastfeeding & conception",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-CONCEPTION",
+      "name": "Planning pregnancy / fertility treatment",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Conception (planning within 3 months)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-DEMENTIA",
+      "name": "Dementia / cognitive impairment",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Dementia / cognitive impairment",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-SUICIDE-SELFHARM",
+      "name": "Suicidal thoughts, self-harm or overdose",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Suicidal ideation (reject within 12 months); §12.2",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-MENTAL-HEALTH",
+      "name": "Depression, anxiety or other mental illness",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Depression, anxiety & mental health; §12.3",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-MED-ANTIDEPRESSANT",
+      "name": "Antidepressant / antipsychotic",
+      "category": "medication",
+      "summary": "§9.8 Cat D — “Started a new antidepressant recently”",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-ALCOHOL",
+      "name": "Alcohol misuse or dependence",
+      "category": "condition",
+      "summary": "§9.8 Cat D — Alcohol abuse or dependence; §12.6",
+      "action": "REJECT_SERVICE",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-WEGTAB-THYROID",
+      "name": "Hypothyroidism / thyroid hormone (Wegovy tablets only)",
+      "category": "medication",
+      "summary": "§9.8 Cat A (Wegovy pill only) / §7.10",
+      "action": "REJECT_WEGOVY_TABLETS",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-ALLERGY-SEMAGLUTIDE",
+      "name": "Semaglutide hypersensitivity",
+      "category": "allergy",
+      "summary": "SmPC 4.3 — hypersensitivity (Wegovy injection and tablets)",
+      "action": "REJECT_PRODUCTS",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-ALLERGY-TIRZEPATIDE",
+      "name": "Tirzepatide hypersensitivity",
+      "category": "allergy",
+      "summary": "SmPC 4.3 — hypersensitivity (Mounjaro)",
+      "action": "REJECT_PRODUCTS",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-ALLERGY-ORFORGLIPRON",
+      "name": "Orforglipron hypersensitivity",
+      "category": "allergy",
+      "summary": "SmPC 4.3 — hypersensitivity (Foundayo)",
+      "action": "REJECT_PRODUCTS",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-FDY-AVOID-INHIB",
+      "name": "Ritonavir / cobicistat regimen (Foundayo: avoid)",
+      "category": "medication",
+      "summary": "§7.11 — Strong CYP3A4 + OATP1B inhibitors (avoid)",
+      "action": "REJECT_FOUNDAYO",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-FDY-PAXLOVID",
+      "name": "Paxlovid course (Foundayo: avoid during course)",
+      "category": "medication",
+      "summary": "§7.11 — Nirmatrelvir/ritonavir during the course",
+      "action": "REJECT_FOUNDAYO",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-FDY-AVOID-INDUCER",
+      "name": "Strong CYP3A4 inducer (Foundayo: avoid)",
+      "category": "medication",
+      "summary": "§7.11 — Strong CYP3A4 inducers (avoid)",
+      "action": "REJECT_FOUNDAYO",
+      "outcome": "reject"
+    },
+    {
+      "id": "WL-FDY-CAP9",
+      "name": "Strong CYP3A4 inhibitor (Foundayo max 9 mg)",
+      "category": "medication",
+      "summary": "§7.11 — Strong CYP3A4 inhibitors (max 9 mg)",
+      "action": "CAP_FOUNDAYO_9MG",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-FDY-SIMVASTATIN",
+      "name": "Simvastatin (Foundayo: hold, halve dose)",
+      "category": "medication",
+      "summary": "§7.11 — Simvastatin (hold, Macro 46)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-FDY-MOD-INDUCER",
+      "name": "Moderate CYP3A4 inducer (Foundayo: escalate)",
+      "category": "medication",
+      "summary": "§7.11 — Moderate CYP3A4 inducers (escalate §8.2)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-FDY-TOPOTECAN",
+      "name": "Oral topotecan (Foundayo)",
+      "category": "medication",
+      "summary": "Service extension — not in §7.11",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-FDY-ROSUVA-40",
+      "name": "Rosuvastatin 40 mg (Foundayo: counsel)",
+      "category": "medication",
+      "summary": "§7.11 — Rosuvastatin above 20 mg (may proceed, counsel)",
+      "action": "COUNSEL",
+      "outcome": "counsel"
+    },
+    {
+      "id": "WL-FDY-ANTIHYPERTENSIVE",
+      "name": "Antihypertensive (Foundayo: counsel)",
+      "category": "medication",
+      "summary": "§7.11 — Antihypertensives (may proceed, counsel)",
+      "action": "COUNSEL",
+      "outcome": "counsel"
+    },
+    {
+      "id": "WL-FDY-HYPOTENSION",
+      "name": "Hypotension or syncope (Foundayo: escalate)",
+      "category": "condition",
+      "summary": "§9.8 Foundayo-specific cautions — escalate §8.2",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-FDY-CONDUCTION",
+      "name": "Arrhythmia or conduction disorder (Foundayo: escalate)",
+      "category": "condition",
+      "summary": "§9.8 Foundayo-specific cautions / §7.11 — heart rate and conduction",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-OCP-COUNSEL",
+      "name": "Oral contraceptive (Mounjaro / Foundayo counselling)",
+      "category": "medication",
+      "summary": "§7.11 / Mounjaro SmPC 4.5 — oral contraceptive efficacy",
+      "action": "COUNSEL",
+      "outcome": "counsel"
+    },
+    {
+      "id": "WL-ASPIRATION",
+      "name": "Planned anaesthesia, sedation or endoscopy",
+      "category": "condition",
+      "summary": "SmPC 4.4 (all GLP-1s) — pulmonary aspiration; §7.11 class warnings",
+      "action": "COUNSEL",
+      "outcome": "counsel"
+    },
+    {
+      "id": "WL-AKI",
+      "name": "Acute kidney injury / dehydration",
+      "category": "condition",
+      "summary": "SmPC 4.4 — dehydration and renal impairment; §7.11 class warnings",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-ANTIEMETIC",
+      "name": "Antiemetic",
+      "category": "medication",
+      "summary": "§9.8 knowledge base — Antiemetics (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-CARDIAC",
+      "name": "Cardiac condition (escalate)",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Cardiology (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-STROKE",
+      "name": "Stroke or TIA (type to confirm)",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Neurology (ischaemic stroke prescribe; haemorrhagic escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-EPILEPSY",
+      "name": "Epilepsy or seizures",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Epilepsy (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-HEPATIC-ESCALATE",
+      "name": "Hepatitis or deranged LFTs",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Viral / autoimmune hepatitis, deranged LFTs (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-GI-ESCALATE",
+      "name": "Other GI / biliary (escalate)",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — GI (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-ENDO-ESCALATE",
+      "name": "Thyroid / pituitary (escalate)",
+      "category": "condition",
+      "summary": "§9.8 Cat A (overactive thyroid awaiting RAI/surgery) / knowledge base",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-TRIGLYCERIDES",
+      "name": "Raised triglycerides",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Raised triglycerides (fasting >4.5 reject)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-OBS-TG",
+      "name": "Triglyceride result",
+      "category": "observation",
+      "summary": "§9.8 knowledge base — Raised triglycerides",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-RENAL-OTHER",
+      "name": "Solitary kidney / transplant / cysts",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Renal (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-AUTOIMMUNE",
+      "name": "Autoimmune disease or DMARD",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Autoimmune disorder; DMARDs (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-HIV",
+      "name": "HIV",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — HIV (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-ANAEMIA",
+      "name": "Anaemia",
+      "category": "condition",
+      "summary": "§9.8 knowledge base — Anaemia (escalate)",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-VTE-ANTICOAG",
+      "name": "VTE / anticoagulant (not in protocol)",
+      "category": "condition",
+      "summary": "Not in EDM-WL-01 v2.3 — confirm against EDM-WM-CI-01",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-HAEM-OTHER",
+      "name": "Other haematology (not in protocol)",
+      "category": "condition",
+      "summary": "Not in EDM-WL-01 v2.3 — confirm against EDM-WM-CI-01",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    },
+    {
+      "id": "WL-OTHER-UNLISTED",
+      "name": "Other previous reject keywords (not in protocol)",
+      "category": "condition",
+      "summary": "Not in EDM-WL-01 v2.3 — confirm against EDM-WM-CI-01",
+      "action": "FLAG_PRESCRIBER",
+      "outcome": "flag"
+    }
+  ],
+  "editing": {
+    "generator": "scripts/generate-wl-condition.mjs",
+    "rules": "src/conditions/weight-loss/rules.json",
+    "keywordGroups": "src/conditions/weight-loss/keyword-groups.json",
+    "advice": "compiled/advice/rules/weight-loss.data.js",
+    "markdown": "src/conditions/md-rules/weight-loss.md",
+    "source": "EDM-WL-01_v2.3_DRAFT_Foundayo.docx"
+  }
+}

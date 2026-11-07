@@ -1262,6 +1262,7 @@ function scrapeOrderData() {
     age: null,
     gender: null,
     email: null,
+    address: null,
 
     // Clinical metrics
     bmi: null,
@@ -1345,14 +1346,31 @@ function scrapeOrderData() {
     const label = t.textContent.trim().replace(/\s+/g, " ");
     if (label) data.patientTags.push(label);
   });
-  document.querySelectorAll(".od2-patient-card .od2-meta-row").forEach(row => {
-    const lbl = row.querySelector(".lbl");
-    const val = row.querySelector(".val");
-    if (!lbl || !val) return;
-    const l = lbl.textContent.trim().toLowerCase();
-    const v = val.textContent.trim().replace(/\s+/g, " ");
+  document.querySelectorAll(".od2-patient-card .od2-meta-row, .odhr-meta-row").forEach(row => {
+    const lbl = row.querySelector(".lbl, .odhr-meta-lbl, .od2-meta-k, .k");
+    const val = row.querySelector(".val, .odhr-meta-text, .odhr-meta-val, .od2-meta-v, .v");
+    let l = "";
+    let v = "";
+    if (lbl && val) {
+      l = lbl.textContent.trim().toLowerCase();
+      v = val.textContent.trim().replace(/\s+/g, " ");
+    }
+    if (!l || !v || v.toLowerCase() === l) {
+      const raw = (row.textContent || "").replace(/\s+/g, " ").trim();
+      const match = raw.match(/^(order\s*no|dob|date of birth|phone|email|address|sex|gender)\b\s*(.*)$/i);
+      if (!match) return;
+      l = match[1].toLowerCase().replace(/\s+/g, " ");
+      v = match[2].trim();
+    }
+    if (!v || v === "—" || v === "-" || v === "–") return;
     if (l === "order no") data.orderNo = v.replace(/^#/, "");
     if (l === "email" && !data.email) data.email = v;
+    if ((l === "dob" || l === "date of birth") && !data.dob) {
+      data.dob = v;
+      data.age = calculateAge(data.dob);
+    }
+    if (l === "address") data.address = v;
+    if ((l === "sex" || l === "gender") && !data.gender) data.gender = v;
   });
 
   // ── Vitals grid (od2-vitals-grid) — BMI, Age, Sex fallback
@@ -1407,13 +1425,15 @@ function scrapeOrderData() {
     rows.forEach((row, i) => {
       const cells = row.querySelectorAll("td");
       if (cells.length >= 4) {
+        const cols = row.querySelectorAll("td.col-num");
+        const cellText = (cell) => (cell?.textContent || "").replace(/\s+/g, " ").trim();
         const entry = {
-          date: cells[0].textContent.replace(/Current|Start/g, "").trim(),
-          bmi: parseFloat(cells[1].textContent) || null,
-          height: cells[2].textContent.trim(),
-          weight: cells[3].textContent.trim(),
-          isCurrent: cells[0].textContent.includes("Current"),
-          isStart: cells[0].textContent.includes("Start")
+          date: cellText(cells[0]).replace(/\b(Current|Start)\b/gi, "").trim(),
+          bmi: parseFloat(cellText(cols[0])) || null,
+          height: (cellText(cols[1]).match(/\d+(?:\.\d+)?\s*cm/i) || [])[0] || "",
+          weight: (cellText(cols[2]).match(/\d+(?:\.\d+)?\s*kg/i) || [])[0] || "",
+          isCurrent: /\bcurrent\b/i.test(cellText(cells[0])),
+          isStart: /\bstart\b/i.test(cellText(cells[0]))
         };
         data.bmiHistory.push(entry);
         if (entry.isCurrent) {
@@ -2009,6 +2029,7 @@ function renderInlinePatientCard(data) {
         <div class="mg-ipc-header-left">
           <h2 class="mg-ipc-name">${mgEscapeHtml(data.patientName)}</h2>
           ${dobParts.length ? `<div class="mg-ipc-dob">${dobParts.join(" ")}</div>` : ""}
+          ${data.address ? `<div class="mg-ipc-dob">${mgEscapeHtml(data.address)}</div>` : ""}
         </div>
         <div class="mg-ipc-header-right">
           ${orderDate ? `<div class="mg-ipc-submitted"><div class="mg-ipc-submitted-lbl">Submitted</div><div class="mg-ipc-submitted-val">${mgEscapeHtml(orderDate)}</div></div>` : ""}
@@ -2052,9 +2073,6 @@ function ensureInlinePatientCardObserver() {
 function performScan() {
   // Only scan on od2-tab pages
   if (!document.querySelector(".od2-tabs")) return;
-  // Background order tabs must not push scans — that makes the side panel flip to another patient.
-  if (document.visibilityState === "hidden") return;
-
   const data = scrapeOrderData();
   try { data.pageUrl = window.location.href; } catch (_) {}
   lastScannedData = data;
@@ -2519,6 +2537,41 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 
+function mgOrderPath() {
+  try { return new URL(location.href).pathname; } catch { return location.pathname || ""; }
+}
+
+let mgTrackedOrderPath = mgOrderPath();
+
+function mgNoteOrderUrl(force) {
+  const path = mgOrderPath();
+  if (!/^\/order\//.test(path)) return;
+  if (!force && path === mgTrackedOrderPath) return;
+  mgTrackedOrderPath = path;
+  lastScannedData = null;
+  chrome.runtime.sendMessage({ type: "ORDER_URL_CHANGED", url: location.href }).catch(() => {});
+  setTimeout(() => { try { performScan(); } catch (_) {} }, 350);
+}
+
+function mgWatchOrderUrl() {
+  if (window.__mgOrderUrlWatch) return;
+  window.__mgOrderUrlWatch = true;
+  const push = history.pushState;
+  const replace = history.replaceState;
+  history.pushState = function () {
+    const result = push.apply(this, arguments);
+    mgNoteOrderUrl(false);
+    return result;
+  };
+  history.replaceState = function () {
+    const result = replace.apply(this, arguments);
+    mgNoteOrderUrl(false);
+    return result;
+  };
+  window.addEventListener("popstate", () => mgNoteOrderUrl(false));
+  mgNoteOrderUrl(true);
+}
+
 function boot() {
   if (isPrescriptionQueuePage()) {
     bootPrescriptionQueuePage();
@@ -2526,6 +2579,7 @@ function boot() {
     return;
   }
 
+  mgWatchOrderUrl();
   if (!document.querySelector(".od2-tabs")) {
     // Keep checking if we land on an order page later
     setTimeout(boot, 2000);
@@ -2533,6 +2587,7 @@ function boot() {
   }
 
   performScan();
+  [400, 1200, 2500].forEach((ms) => setTimeout(performScan, ms));
   detectTabCompletionChanges();
   detectActiveTabChanges();
   try { installDocModalEnhancements(); } catch {}
@@ -2541,12 +2596,21 @@ function boot() {
     runParallelClinicalWorkerOnce().catch(() => {});
   }, 600);
 
-  // Periodically rescan in case data changes
   if (scanInterval) clearInterval(scanInterval);
-  scanInterval = setInterval(performScan, 10000);
+  scanInterval = setInterval(performScan, 2000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") performScan();
   });
+  window.addEventListener("pageshow", () => performScan());
+  const nameWatch = new MutationObserver(() => performScan());
+  const watchName = () => {
+    const nameEl = document.querySelector(".od2-patient-name .patient-name-text, .od2-patient-name");
+    if (!nameEl || nameEl.dataset.mgWatched) return;
+    nameEl.dataset.mgWatched = "1";
+    nameWatch.observe(nameEl, { childList: true, characterData: true, subtree: true });
+  };
+  watchName();
+  setInterval(watchName, 1000);
 }
 
 if (document.readyState === "loading") {
@@ -7216,12 +7280,50 @@ function ensureDecisionScrLinkObserver() {
   initDecisionScrLinkEarly();
 }
 
+function mgPatientForNhs() {
+  const data = scrapeOrderData();
+  try { data.pageUrl = location.href; } catch (_) {}
+  lastScannedData = data;
+  chrome.runtime.sendMessage({ type: "ORDER_DATA_SCANNED", data }).catch(() => {});
+  const name = String(data.patientName || "").trim();
+  const parts = name.split(/\s+/).filter(Boolean);
+  const genderRaw = String(data.gender || "").toLowerCase();
+  const current = (data.bmiHistory || []).find((row) => row.isCurrent) || data.bmiHistory?.[0];
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+    dateOfBirth: data.dob || "",
+    dob: data.dob || "",
+    address: data.address || "",
+    gender: genderRaw.startsWith("f") ? "Female" : genderRaw.startsWith("m") ? "Male" : "",
+    height: data.height || current?.height || "",
+    weight: data.weight || current?.weight || "",
+    bmi: data.bmi != null ? String(data.bmi) : "",
+    heightWeightDate: current?.date || ""
+  };
+}
+
+function initPageGoToScr() {
+  if (window.__mgPageGoToScr) return;
+  window.__mgPageGoToScr = true;
+  document.addEventListener("click", (e) => {
+    const link = e.target.closest("#scr2Open, a.scr2-btn");
+    if (!link || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    const patient = mgPatientForNhs();
+    chrome.runtime.sendMessage({ type: "OPEN_NHS_SCR", patient }, () => { void chrome.runtime.lastError; });
+  }, true);
+}
+
 function initScrLinkTracking() {
   if (window.__mgScrLinkTracking) return;
   window.__mgScrLinkTracking = true;
+  initPageGoToScr();
   document.addEventListener("click", (e) => {
     const link = e.target.closest('a.scr-cta, a[href*="portal.spineservices.nhs.uk"]');
-    if (!link) return;
+    if (!link || link.id === "scr2Open" || link.classList.contains("scr2-btn")) return;
     try {
       chrome.runtime.sendMessage({
         type: "SCR_LINK_CLICKED",

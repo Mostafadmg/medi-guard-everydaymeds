@@ -1,0 +1,134 @@
+[
+  {
+    "id": "red-flags",
+    "label": "Red flags & secondary headache (Section 3)",
+    "keywords": [
+      "thunderclap", "subarachnoid", "meningitis", "focal neurological",
+      "limb weakness", "slurred speech", "progressive headache",
+      "head injury", "raised intracranial", "CSF leak", "brain tumour"
+    ]
+  },
+  {
+    "id": "excluded-subtypes",
+    "label": "Excluded subtypes & MOH",
+    "keywords": [
+      "hemiplegic migraine", "basilar migraine", "ophthalmoplegic migraine",
+      "chronic migraine", "medication overuse headache", "MOH", "daily headache"
+    ]
+  },
+  {
+    "id": "pregnancy",
+    "label": "Pregnancy & breastfeeding",
+    "keywords": ["pregn", "gestation", "breastfeeding", "lactation", "postpartum"]
+  },
+  {
+    "id": "cardiovascular-triptans",
+    "label": "Cardiovascular — Part A triptan exclusions",
+    "keywords": [
+      "myocardial infarction", "angina", "ischaemic heart disease", "IHD",
+      "coronary stent", "CABG", "PCI", "stroke", "TIA", "CVA",
+      "peripheral vascular disease", "heart failure", "WPW",
+      "uncontrolled hypertension", "Prinzmetal"
+    ]
+  },
+  {
+    "id": "organ-impairment",
+    "label": "Liver, kidney, epilepsy",
+    "keywords": [
+      "cirrhosis", "hepatic impairment", "Child-Pugh", "liver failure",
+      "renal failure", "dialysis", "CKD stage 5", "epilepsy", "seizure"
+    ]
+  },
+  {
+    "id": "allergy",
+    "label": "Triptan / rimegepant allergy",
+    "keywords": [
+      "sumatriptan allergy", "zolmitriptan allergy", "rizatriptan allergy",
+      "rimegepant allergy", "Vydura allergy", "triptan hypersensitivity"
+    ]
+  },
+  {
+    "id": "cancer-immuno",
+    "label": "Cancer & immunosuppression",
+    "keywords": [
+      "chemotherapy", "immunotherapy", "metastases", "HIV", "immunosuppressant"
+    ]
+  },
+  {
+    "id": "cluster-gca",
+    "label": "Cluster headache & GCA",
+    "keywords": [
+      "cluster headache", "trigeminal autonomic", "giant cell arteritis",
+      "temporal arteritis", "jaw claudication"
+    ]
+  },
+  {
+    "id": "chc-aura",
+    "label": "CHC with migraine aura",
+    "keywords": [
+      "combined pill aura", "COC aura", "contraceptive patch aura", "migraine with aura pill"
+    ]
+  },
+  {
+    "id": "ergot-triptan-interactions",
+    "label": "Ergotamine & alternate triptans",
+    "keywords": [
+      "ergotamine", "Cafergot", "methysergide", "dihydroergotamine",
+      "almotriptan", "eletriptan", "frovatriptan", "naratriptan"
+    ]
+  },
+  {
+    "id": "serotonergic",
+    "label": "Serotonergic medicines (Part A decline)",
+    "keywords": [
+      "SSRI", "SNRI", "citalopram", "sertraline", "fluoxetine", "venlafaxine",
+      "duloxetine", "lithium", "St John's Wort", "MAOI", "moclobemide"
+    ]
+  },
+  {
+    "id": "cyp3a4-rimegepant",
+    "label": "CYP3A4 & P-gp — rimegepant / Vydura interactions",
+    "keywords": [
+      "ketoconazole", "itraconazole", "clarithromycin", "ritonavir", "cobicistat",
+      "rifampicin", "carbamazepine", "phenytoin", "verapamil", "erythromycin",
+      "ciclosporin", "fluconazole"
+    ]
+  },
+  {
+    "id": "cgrp-pathway",
+    "label": "Other CGRP medicines (not combined with Vydura)",
+    "keywords": [
+      "atogepant", "Aquipta", "erenumab", "Aimovig", "fremanezumab", "Ajovy",
+      "galcanezumab", "Emgality", "eptinezumab", "Vyepti"
+    ]
+  },
+  {
+    "id": "product-interactions",
+    "label": "Product-selection interactions",
+    "keywords": [
+      "propranolol", "cimetidine", "fluvoxamine", "opioid headache", "codeine migraine"
+    ]
+  },
+  {
+    "id": "supplied-products-triptans",
+    "label": "Part A — supplied triptans (context)",
+    "keywords": [
+      "sumatriptan", "Imigran", "zolmitriptan", "Zomig", "rizatriptan", "Maxalt",
+      "nasal spray sumatriptan"
+    ]
+  },
+  {
+    "id": "supplied-products-vydura",
+    "label": "Part B — Vydura / rimegepant (context)",
+    "keywords": [
+      "rimegepant", "Vydura", "gepant", "CGRP receptor antagonist", "oral lyophilisate"
+    ]
+  },
+  {
+    "id": "migraine-diagnosis",
+    "label": "Migraine diagnosis (positive context)",
+    "keywords": [
+      "migraine", "migraine with aura", "migraine without aura", "episodic migraine"
+    ]
+  }
+]

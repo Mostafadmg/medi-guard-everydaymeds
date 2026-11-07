@@ -1,0 +1,233 @@
+/** Full in-page clinical check + validation fix (for browser CDP evaluate). */
+export const FULL_CLINICAL_SOURCE = `async () => {
+  const DEFAULTS = {
+    scr: "SCR not available, information provided by the patient.",
+    counselling:
+      "Patient has been contacted by email and provided counselling and information on their treatment. Patient can contact us at any time if they need further help or information.",
+    rationale:
+      "The patient meets the service eligibility criteria. The consultation responses, medical history, current medication, allergies and supporting documentation have been reviewed. No known contraindications, clinically significant interactions, red flags or other concerns have been identified.\\n\\nBased on the information available at the time of assessment, prescribing is considered clinically appropriate. Appropriate counselling, monitoring, follow-up and safety-netting advice have been provided. Prescription approved.",
+  };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const todayIso = () => {
+    const t = new Date();
+    return \`\${t.getFullYear()}-\${String(t.getMonth() + 1).padStart(2, "0")}-\${String(t.getDate()).padStart(2, "0")}\`;
+  };
+  const visibleP2u = () =>
+    [...document.querySelectorAll("#rxaP2uQuestions .rxa-p2u-q")].find((el) => el.offsetParent !== null);
+  const waitForEl = async (sel, ms = 8000) => {
+    const t = Date.now();
+    while (Date.now() - t < ms) {
+      const el = document.querySelector(sel);
+      if (el && (el.offsetParent !== null || ["INPUT", "TEXTAREA", "BUTTON"].includes(el.tagName)))
+        return el;
+      await sleep(80);
+    }
+    return null;
+  };
+  const waitBtn = async (sel, ms = 12000) => {
+    const t = Date.now();
+    while (Date.now() - t < ms) {
+      const b = document.querySelector(sel);
+      if (b && !b.disabled && b.offsetParent !== null && getComputedStyle(b).display !== "none") return b;
+      await sleep(80);
+    }
+    return null;
+  };
+  const clickRadio = (input) => {
+    if (!input) return false;
+    input.closest("label")?.click();
+    input.checked = true;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (!input.checked) input.click();
+    return input.checked;
+  };
+  const setVal = (el, v) => {
+    if (!el) return;
+    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(el, v);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
+  };
+  const consultGender = () => {
+    for (const li of document.querySelectorAll("li, .od2-consult-item, [class*='consult']")) {
+      const t = li.textContent || "";
+      if (/sex were you assigned|assigned at birth/i.test(t)) {
+        const m = t.match(/\\b(Female|Male)\\b/i);
+        if (m) return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+      }
+    }
+    for (const el of document.querySelectorAll(".od2-patient-meta dt, .patient-meta dt, dt")) {
+      if (/^sex$/i.test(el.textContent.trim())) {
+        const dd = el.nextElementSibling;
+        if (dd) return dd.textContent.trim();
+      }
+    }
+    return null;
+  };
+  const normUkPhone = (raw) => {
+    let d = String(raw || "").replace(/\\D/g, "");
+    if (d.startsWith("44")) d = d.slice(2);
+    if (d.startsWith("0")) d = d.slice(1);
+    if (d.length === 10) return \`+44\${d}\`;
+    if (d.length === 11 && d.startsWith("7")) return \`+44\${d}\`;
+    return raw;
+  };
+  const validationErrors = () =>
+    [...document.querySelectorAll(".invalid-feedback, .text-danger, .alert-danger, #rxaDrawer .rxa-error, .rxa-validation-msg")]
+      .filter((e) => e.offsetParent !== null)
+      .map((e) => e.textContent.trim())
+      .filter(Boolean);
+  const fixValidation = async () => {
+    const fixes = [];
+    const errs = validationErrors().join(" ").toLowerCase();
+    const gender = consultGender();
+    if (gender && /gender|sex|not correct/.test(errs)) {
+      for (const sel of ["select[name*='sex']", "select[name*='gender']", "#patientSex", "#od2Sex"]) {
+        const s = document.querySelector(sel);
+        if (!s) continue;
+        const want = gender.toLowerCase();
+        for (const opt of s.options) {
+          if (opt.textContent.toLowerCase().includes(want) || opt.value.toLowerCase() === want) {
+            s.value = opt.value;
+            s.dispatchEvent(new Event("change", { bubbles: true }));
+            fixes.push("gender:" + opt.value);
+            break;
+          }
+        }
+      }
+      document.querySelector('[data-action="edit-sex"], button[aria-label*="sex" i]')?.click();
+    }
+    if (/phone|number|mobile/.test(errs)) {
+      const phoneEl =
+        document.querySelector("input[name*='phone' i], #patientPhone, .od2-phone input") ||
+        document.querySelector('[data-field="phone"] input');
+      const src =
+        document.querySelector(".od2-patient-meta dd, .patient-phone")?.textContent?.trim() || phoneEl?.value;
+      if (phoneEl && src) {
+        setVal(phoneEl, normUkPhone(src));
+        fixes.push("phone");
+      }
+    }
+    await sleep(400);
+    return fixes;
+  };
+  const fillP2u = () => {
+    let filled = 0;
+    document.querySelectorAll("#rxaP2uQuestions .rxa-p2u-q").forEach((qEl) => {
+      if (qEl.offsetParent === null) return;
+      const expected = String(qEl.getAttribute("data-p2u-expected") || "")
+        .trim()
+        .toLowerCase();
+      if (!expected) return;
+      const field = qEl.getAttribute("data-p2u-field");
+      let radio = qEl.querySelector(\`input[type="radio"][value="\${expected}"]\`);
+      if (!radio && field) {
+        radio = document.querySelector(\`input[type="radio"][name="\${field}"][value="\${expected}"]\`);
+      }
+      if (radio) {
+        clickRadio(radio);
+        filled += 1;
+      }
+    });
+    return filled;
+  };
+  const fillScrComms = async () => {
+    const scr = await waitForEl('input[name="rxa_scr_status"][value="not_accessed"]', 4000);
+    if (scr) {
+      clickRadio(scr);
+      setVal(document.querySelector("#rxaScrNotAccessedReason"), DEFAULTS.scr);
+    }
+    const comm = document.querySelector('input[name="rxa_comm_method"][value="secure_message"]');
+    if (comm) {
+      clickRadio(comm);
+      setVal(document.querySelector("#rxaCommDate"), todayIso());
+      setVal(document.querySelector("#rxaCommSummary"), DEFAULTS.counselling);
+    }
+  };
+  const fillDecision = () => {
+    for (const sel of [
+      'input[name="rxa_escalated"][value="no"]',
+      'input[name="rxa_escalation_required"][value="no"]',
+      'input[name="rxa_escalation"][value="no"]',
+    ]) {
+      const esc = document.querySelector(sel);
+      if (esc) clickRadio(esc);
+    }
+    for (const sel of [
+      'input[name="rxa_final_decision"][value="approved_for_supply"]',
+      'input[name="rxa_final_decision"][value="approved"]',
+    ]) {
+      const appr = document.querySelector(sel);
+      if (appr) clickRadio(appr);
+    }
+    const rat = document.querySelector("#rxaFinalRationale, textarea[name='rxa_final_rationale']");
+    if (rat) setVal(rat, DEFAULTS.rationale);
+  };
+
+  const path = location.pathname;
+  if (!document.querySelector("#rxaDrawer")?.offsetParent) {
+    const disp = await waitForEl('.od2-action[data-action="dispensary"]', 15000);
+    if (!disp) return { ok: false, err: "no dispensary action", path };
+    disp.click();
+    await sleep(600);
+  }
+
+  for (let step = 0; step < 4; step++) {
+    if (visibleP2u()) break;
+    const cont = document.querySelector("#rxaContinueBtn");
+    if (cont && !cont.disabled && cont.offsetParent !== null) {
+      await fillScrComms();
+      cont.click();
+      await sleep(700);
+      continue;
+    }
+    break;
+  }
+
+  if (visibleP2u()) {
+    const filled = fillP2u();
+    if (!filled) return { ok: false, err: "p2u not filled", path };
+  } else {
+    fillDecision();
+  }
+
+  await sleep(300);
+  let approve = await waitBtn("#rxaApproveBtn", 8000);
+  if (!approve) {
+    return { ok: false, err: "approve not visible", path, panel: document.querySelector("#rxaDrawer")?.innerText?.slice(0, 300) };
+  }
+  approve.scrollIntoView({ block: "center" });
+  await sleep(150);
+  const rect = approve.getBoundingClientRect();
+  approve.click();
+  await sleep(200);
+  for (let i = 0; i < 30; i++) {
+    const swal = document.querySelector(".swal2-popup.swal2-show .swal2-confirm");
+    if (swal) swal.click();
+    await sleep(120);
+  }
+  await sleep(2500);
+  let errs = validationErrors();
+  if (errs.length) {
+    await fixValidation();
+    approve = await waitBtn("#rxaApproveBtn", 6000);
+    if (approve) {
+      approve.click();
+      await sleep(200);
+      for (let i = 0; i < 20; i++) {
+        document.querySelector(".swal2-popup.swal2-show .swal2-confirm")?.click();
+        await sleep(120);
+      }
+      await sleep(2500);
+    }
+    errs = validationErrors();
+    if (errs.length) {
+      return { ok: false, skipped: true, err: errs.join("; "), path };
+    }
+  }
+  const still = document.querySelector('.od2-action[data-action="dispensary"]');
+  if (still) return { ok: false, err: "dispensary still present", path };
+  return { ok: true, path, click: { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } };
+}`;

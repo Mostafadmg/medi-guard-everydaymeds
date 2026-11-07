@@ -1,0 +1,133 @@
+/**
+ * Patient Assessment Required rules (GLP-1).
+ * Purple-themed advice — email patient to confirm before prescribing.
+ *
+ * @module advice/rules/patient-assessment
+ */
+window.EDM_ADVICE_RULES = window.EDM_ADVICE_RULES || {};
+
+window.EDM_ADVICE_RULES.patientAssessment = [
+  {
+    id: 'PA-CANCER',
+    type: 'patient-assessment',
+    tab: 'patient-assessment',
+    tabLabel: 'Patient assessment required',
+    title: 'Cancer Diagnosis',
+    icon: '🎗️',
+    emailAction: 'EMAIL PATIENT',
+    exclusionNote:
+      'Medullary thyroid cancer and MEN2 are absolute contraindications',
+    excludeTags: [
+      'intraepithelial neoplasia',
+      'cervical intraepithelial',
+      'cin grade',
+      'cin 1',
+      'cin 2',
+      'cin 3',
+      'vulval intraepithelial',
+      'vin grade',
+      'anal intraepithelial',
+      'ain grade',
+      'bartholin',
+      'dysplasia',
+      'metaplasia',
+    ],
+    specialConsiderations: [
+      {
+        matchTags: ['breast'],
+        icon: '🌷',
+        title: 'Breast Cancer — Special Consideration',
+        text:
+          'Breast cancer history requires clarification, not automatic rejection. Email patient to confirm current cancer status before making decision.',
+      },
+    ],
+    rejectIf: [
+      'Currently under oncology care',
+      'Receiving active cancer treatment (chemotherapy, radiotherapy, targeted therapy)',
+      'Recent recurrence or spread of cancer',
+    ],
+    prescribeIf: [
+      'Cancer in remission and discharged from oncology team',
+      'On long-term hormone therapy only (tamoxifen/Zoladex) with no active treatment',
+      'No recent recurrence or current oncology involvement',
+    ],
+    informationNeeded: [
+      'Treatment status (active, in remission, cured)',
+      'Remission status and duration',
+      'Oncology team discharge status',
+      'For breast cancer: Whether on hormone therapy only (e.g., tamoxifen, Zoladex)',
+    ],
+    referenceFolderRuleIds: ['R005'],
+    searchTags: [
+      'cancer',
+      'carcinoma',
+      'malignant',
+      'oncology',
+      'oncolog',
+      'chemotherapy',
+      'chemo',
+      'radiotherapy',
+      'neoplas',
+      'lymphoma',
+      'leukaemia',
+      'leukemia',
+      'sarcoma',
+      'melanoma',
+      'metastas',
+      'metastatic',
+      'tumour',
+      'tumor',
+      'malignancy',
+      'remission',
+      'tamoxifen',
+      'zoladex',
+      'breast cancer',
+      'breast carcinoma',
+      'prostate cancer',
+      'lung cancer',
+      'colorectal cancer',
+      'bowel cancer',
+    ],
+    priorityTags: ['cancer', 'carcinoma', 'malignant', 'oncology'],
+  },
+  {
+    id: 'PA-ALCOHOL',
+    type: 'patient-assessment',
+    tab: 'patient-assessment',
+    tabLabel: 'Patient assessment required',
+    title: 'Alcohol Abuse or Dependence',
+    icon: '🍺',
+    emailAction: 'EMAIL PATIENT',
+    screeningQuestions: [
+      'How much are you currently drinking?',
+      'Have you felt you ought to Cut down?',
+      'Do you get Annoyed by criticism of your drinking?',
+      'Do you feel Guilty about drinking?',
+      'Do you need an Eye-opener (morning drink)?',
+    ],
+    rejectIf: [
+      'Current alcohol abuse or dependence',
+      'Alcohol abuse mentioned in last 12 months',
+      'In treatment/rehabilitation',
+    ],
+    prescribeIf: [
+      'Historical alcohol issues (> 12 months ago) and currently stable',
+    ],
+    referenceFolderRuleIds: ['R005'],
+    searchTags: [
+      'alcohol dependence',
+      'alcohol abuse',
+      'alcohol misuse',
+      'alcoholic',
+      'alcoholism',
+      'alcohol withdrawal',
+      'alcohol detox',
+      'alcohol problem',
+      'problem drinking',
+      'dependent drinking',
+      'alcohol use disorder',
+    ],
+    priorityTags: ['alcohol dependence', 'alcohol abuse'],
+    excludeTags: ['non-alcoholic', 'non alcoholic', 'alcohol-free', 'alcohol free'],
+  },
+];

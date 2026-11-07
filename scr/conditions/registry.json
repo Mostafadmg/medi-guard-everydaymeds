@@ -1,0 +1,8 @@
+[
+  { "id": "weight-loss", "label": "Weight Loss", "default": true, "rulesFile": "scr/conditions/weight-loss/rules.json" },
+  { "id": "period-delay", "label": "Period Delay", "rulesFile": "scr/conditions/period-delay/rules.json" },
+  { "id": "erectile-dysfunction", "label": "Erectile Dysfunction", "rulesFile": "scr/conditions/erectile-dysfunction/rules.json" },
+  { "id": "migraine", "label": "Migraine", "rulesFile": "scr/conditions/migraine/rules.json" },
+  { "id": "premature-ejaculation", "label": "Premature Ejaculation", "rulesFile": "scr/conditions/premature-ejaculation/rules.json" },
+  { "id": "hair-loss", "label": "Hair Loss", "rulesFile": "scr/conditions/hair-loss/rules.json" }
+]

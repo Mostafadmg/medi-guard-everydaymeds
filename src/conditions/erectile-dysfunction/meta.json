@@ -1,0 +1,291 @@
+{
+  "conditionId": "erectile-dysfunction",
+  "label": "Erectile Dysfunction",
+  "protocol": "EDM-ED-01-SCR / EDM-ED-01 v1 — PDE5 Inhibitors for Erectile Dysfunction (schema 2.0)",
+  "products": [
+    "Sildenafil",
+    "Tadalafil",
+    "Vardenafil",
+    "Avanafil",
+    "Viagra",
+    "Cialis",
+    "Levitra",
+    "Spedra"
+  ],
+  "notes": [
+    "Schema 2.0 actions: reject (hard stop), review (prescriber must resolve), counsel (surface counselling — no barrier).",
+    "Scanner outcomes map reject→reject, review→flag, counsel→counsel.",
+    "Canonical source: src/conditions/erectile-dysfunction/ruleset.json (EDM-ED-01-SCR).",
+    "Clickable protocol advice derived from prescriber_note / patient_message (no separate ED docx excerpt file yet).",
+    "Demo: demo/erectile-dysfunction.html"
+  ],
+  "ruleGuide": [
+    {
+      "id": "ED-ALLERGY",
+      "name": "PDE5 inhibitor allergy or previous serious adverse reaction",
+      "category": "condition",
+      "summary": "5 — Allergy / hypersensitivity; Step 5 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-CV-ISCHAEMIC",
+      "name": "Ischaemic heart disease, angina, MI, revascularisation",
+      "category": "condition",
+      "summary": "5 — Cardiac and cardiovascular conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-CV-FAILURE-STRUCTURAL",
+      "name": "Heart failure, cardiomyopathy, valve and outflow-tract disease",
+      "category": "condition",
+      "summary": "5 — Cardiac and cardiovascular conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-CV-CEREBRO",
+      "name": "Stroke and transient ischaemic attack",
+      "category": "condition",
+      "summary": "5 — Cardiac and cardiovascular conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-CV-ARRHYTHMIA-QT",
+      "name": "Arrhythmia, congenital long QT, hypokalaemia",
+      "category": "condition",
+      "summary": "5 — Cardiac and cardiovascular conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-CV-BP",
+      "name": "Hypertension and hypotension",
+      "category": "condition",
+      "summary": "5 — Cardiac and cardiovascular conditions; Step 4 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-CV-PAH",
+      "name": "Pulmonary arterial hypertension",
+      "category": "condition",
+      "summary": "5 — Cardiac; and Medications not suitable (riociguat) — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-EYE-NAION",
+      "name": "Non-arteritic anterior ischaemic optic neuropathy",
+      "category": "condition",
+      "summary": "5 — Eye conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-EYE-RETINAL",
+      "name": "Hereditary retinal degeneration",
+      "category": "condition",
+      "summary": "5 — Eye conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-LIVER",
+      "name": "Hepatic impairment (any severity)",
+      "category": "condition",
+      "summary": "5 — Hepatic impairment; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-RENAL",
+      "name": "Renal impairment (any severity)",
+      "category": "condition",
+      "summary": "5 — Renal impairment; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-PRIAPISM",
+      "name": "Priapism and predisposing haematological conditions",
+      "category": "condition",
+      "summary": "5 — Priapism history and blood conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-BLEEDING",
+      "name": "Bleeding and clotting disorders",
+      "category": "condition",
+      "summary": "5 — Priapism history and blood conditions; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-ULCER",
+      "name": "Peptic, gastric or duodenal ulcer",
+      "category": "condition",
+      "summary": "5 — Stomach ulcers; Step 6 — REVIEW",
+      "outcome": "flag"
+    },
+    {
+      "id": "ED-PENILE",
+      "name": "Penile deformity",
+      "category": "condition",
+      "summary": "5 — Penile deformity; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-GALACTOSE",
+      "name": "Galactose intolerance and lactose excipient conditions",
+      "category": "condition",
+      "summary": "5 — Galactose intolerance; Step 6 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-DIABETES",
+      "name": "Diabetes mellitus",
+      "category": "condition",
+      "summary": "6 — Expected side effects and counselling — COUNSEL",
+      "outcome": "counsel"
+    },
+    {
+      "id": "ED-MH-UNSTABLE",
+      "name": "Mental health — unstable or unassessed",
+      "category": "condition",
+      "summary": "5 — Mental health (unstable or unassessed only); Step 5 — REVIEW",
+      "outcome": "flag"
+    },
+    {
+      "id": "ED-SUBSTANCE",
+      "name": "Recreational drug use",
+      "category": "condition",
+      "summary": "5 — Recreational drug or heavy alcohol use — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-ALCOHOL",
+      "name": "Heavy or dependent alcohol use",
+      "category": "condition",
+      "summary": "5 — Recreational drug or heavy alcohol use — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-NITRATE",
+      "name": "Nitrates, nitric oxide donors and guanylate cyclase stimulators",
+      "category": "medication",
+      "summary": "5 — Medications not suitable; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-PDE5-OTHER",
+      "name": "Other PDE5 inhibitors and ED treatments",
+      "category": "medication",
+      "summary": "5 — Another ED treatment; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-DAPOXETINE",
+      "name": "Dapoxetine (premature ejaculation)",
+      "category": "medication",
+      "summary": "7 — Dapoxetine row (NOT yet in Section 5 or Step 7) — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-CYP3A4-STRONG",
+      "name": "Potent CYP3A4 inhibitors",
+      "category": "medication",
+      "summary": "5 — Strong CYP3A4 inhibitors; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-CYP3A4-MOD",
+      "name": "Moderate CYP3A4 inhibitors",
+      "category": "medication",
+      "summary": "5 — Moderate CYP3A4 inhibitors; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-ALPHA-DOXAZOSIN",
+      "name": "Doxazosin",
+      "category": "medication",
+      "summary": "5 — Alpha-blockers; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-ALPHA-OTHER",
+      "name": "Alpha-blockers other than doxazosin",
+      "category": "medication",
+      "summary": "5 — Alpha-blockers; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-BP",
+      "name": "Antihypertensives other than alpha-blockers",
+      "category": "medication",
+      "summary": "5 — Other blood pressure medicines; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-SACUBITRIL",
+      "name": "Sacubitril/valsartan",
+      "category": "medication",
+      "summary": "Not yet in Section 5 — flag for addition — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-INDUCER",
+      "name": "Enzyme-inducing medicines",
+      "category": "medication",
+      "summary": "5 — Enzyme-inducing medicines; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-ANTICOAG",
+      "name": "Anticoagulants and antiplatelets",
+      "category": "medication",
+      "summary": "5 — Anticoagulants / antiplatelets; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-ANTIARR",
+      "name": "Antiarrhythmics and QT-prolonging medicines",
+      "category": "medication",
+      "summary": "5 — Antiarrhythmics / QT-prolonging medicines; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-THEOPHYLLINE",
+      "name": "Theophylline and aminophylline",
+      "category": "medication",
+      "summary": "5 — Other documented interaction; 7 — REJECT",
+      "outcome": "reject"
+    },
+    {
+      "id": "ED-MED-DIABETES",
+      "name": "Diabetes medicines (context only)",
+      "category": "medication",
+      "summary": "6 — Counselling — COUNSEL",
+      "outcome": "counsel"
+    },
+    {
+      "id": "ED-MED-ANTIDEPRESSANT",
+      "name": "Antidepressants and SSRIs (context only)",
+      "category": "medication",
+      "summary": "5 — Mental health; 6 — REVIEW",
+      "outcome": "flag"
+    },
+    {
+      "id": "ED-CONTEXT-UROLOGY",
+      "name": "Prostate disease and pelvic surgery (context)",
+      "category": "condition",
+      "summary": "References — NICE NG131 1.3.33–1.3.35 — REVIEW",
+      "outcome": "flag"
+    },
+    {
+      "id": "ED-CONTEXT-NEURO-ENDO",
+      "name": "Neurological and endocrine causes (context)",
+      "category": "condition",
+      "summary": "6 — Counselling; NICE CKS — REVIEW",
+      "outcome": "flag"
+    }
+  ],
+  "editing": {
+    "rules": "src/conditions/erectile-dysfunction/rules.json",
+    "keywordGroups": "src/conditions/erectile-dysfunction/keyword-groups.json",
+    "protocolAdvice": "src/conditions/erectile-dysfunction/protocol-advice.json",
+    "ruleset": "src/conditions/erectile-dysfunction/ruleset.json",
+    "markdown": "src/conditions/md-rules/erectile-dysfunction.md",
+    "source": "EveryDayMeds Erectile Dysfunction Protocol EDM-ED-01 v1 (SCR ruleset EDM-ED-01-SCR schema 2.0)"
+  }
+}

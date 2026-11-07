@@ -1,0 +1,58 @@
+{
+  "conditionId": "migraine",
+  "label": "Migraine",
+  "protocol": "EDM-MIG-01 v2.3 — Triptans (Part A) & rimegepant / Vydura (Part B, acute only)",
+  "products": [
+    "Sumatriptan 50 mg tablets",
+    "Sumatriptan 20 mg nasal spray (Imigran)",
+    "Zolmitriptan 2.5 mg orodispersible (Zomig)",
+    "Rizatriptan 10 mg orodispersible (Maxalt)",
+    "Imigran 50 mg tablets",
+    "Zomig 5 mg tablets",
+    "Vydura (rimegepant) 75 mg oral lyophilisate"
+  ],
+  "notes": [
+    "Acute on-demand treatment only — not prevention (atogepant / Aquipta excluded).",
+    "Continuation-of-treatment service — established doctor-diagnosed migraine required.",
+    "Part A (triptans): cardiovascular contraindications apply. Part B (rimegepant): non-vasoconstrictive; different interaction profile.",
+    "Service excludes ≥10 migraine days/month (MOH / high-frequency episodic threshold)."
+  ],
+  "ruleGuide": [
+    { "id": "MIG-RED", "name": "Red flags & secondary headache", "category": "condition", "summary": "Thunderclap headache, new headache >50, focal neurology, atypical aura, meningism, raised ICP pattern, recent head trauma, immunocompromise, progressive/changed headache." },
+    { "id": "MIG-SUBTYPE", "name": "Excluded migraine subtypes", "category": "condition", "summary": "Hemiplegic, basilar/brainstem, ophthalmoplegic migraine — triptans not indicated." },
+    { "id": "MIG-PREG", "name": "Pregnancy, breastfeeding & trying to conceive", "category": "condition", "summary": "Absolute service exclusion for triptans and rimegepant." },
+    { "id": "MIG-CV", "name": "Ischaemic heart disease & coronary vasospasm", "category": "condition", "summary": "MI, angina, IHD, Prinzmetal angina — triptan SmPC absolute contraindication." },
+    { "id": "MIG-STROKE", "name": "Stroke & TIA", "category": "condition", "summary": "Previous stroke or TIA — triptan class contraindication." },
+    { "id": "MIG-PVD", "name": "Peripheral vascular disease", "category": "condition", "summary": "Poor peripheral circulation — triptan service exclusion." },
+    { "id": "MIG-HTN", "name": "Uncontrolled hypertension", "category": "condition", "summary": "Moderate/severe or untreated/uncontrolled BP — triptans declined." },
+    { "id": "MIG-CARDIAC", "name": "Heart failure, arrhythmia & WPW", "category": "condition", "summary": "HF, significant arrhythmia, Wolff-Parkinson-White — triptan exclusion." },
+    { "id": "MIG-CV-PROC", "name": "Recent cardiac revascularisation", "category": "condition", "summary": "CABG, stent, angioplasty within 12 months — service exclusion." },
+    { "id": "MIG-LIVER", "name": "Hepatic impairment", "category": "condition", "summary": "Moderate/severe liver disease; Child-Pugh C for rimegepant." },
+    { "id": "MIG-RENAL", "name": "Renal impairment", "category": "condition", "summary": "Any disclosed kidney disease (triptans); severe/ESRD/dialysis (rimegepant)." },
+    { "id": "MIG-EPILEPSY", "name": "Epilepsy & seizures", "category": "condition", "summary": "Epilepsy or seizure history — triptan service exclusion." },
+    { "id": "MIG-ALLERGY", "name": "Triptan / rimegepant allergy", "category": "condition", "summary": "Hypersensitivity to sumatriptan, zolmitriptan, rizatriptan, rimegepant or excipients." },
+    { "id": "MIG-CANCER-IMMUNO", "name": "Cancer & immunosuppression", "category": "condition", "summary": "Active/recent malignancy, chemotherapy, immunosuppressants, HIV — red-flag pathway." },
+    { "id": "MIG-CLUSTER", "name": "Cluster headache features", "category": "condition", "summary": "Unilateral periorbital autonomic cluster pattern — not migraine; decline." },
+    { "id": "MIG-GCA", "name": "Giant cell arteritis & occipital headache", "category": "condition", "summary": "Temporal arteritis, jaw claudication, scalp tenderness, occipital predominant headache." },
+    { "id": "MIG-CHC-AURA", "name": "Combined hormonal contraception with aura", "category": "condition", "summary": "COC/patch/ring with migraine with aura — UKMEC 4; GP review required." },
+    { "id": "MIG-MED-ERGOT", "name": "Ergotamine & ergot derivatives", "category": "medication", "summary": "Contraindicated with triptans; 24h separation required." },
+    { "id": "MIG-MED-TRIPTAN-ALT", "name": "Non-supplied triptans (concomitant use risk)", "category": "medication", "summary": "Almotriptan, eletriptan, frovatriptan, naratriptan — not supplied; concomitant triptan use contraindicated." },
+    { "id": "MIG-MED-MAOI", "name": "MAOIs", "category": "medication", "summary": "MAOI or within 2 weeks of stopping — triptan contraindication." },
+    { "id": "MIG-MED-SEROTONERGIC", "name": "Serotonergic antidepressants & lithium", "category": "medication", "summary": "SSRIs, SNRIs, other antidepressants, lithium, St John's Wort — service-level decline for triptans." },
+    { "id": "MIG-MED-CYP3A4-INH", "name": "Strong CYP3A4 inhibitors", "category": "medication", "summary": "Ketoconazole, itraconazole, clarithromycin, ritonavir, cobicistat — rimegepant contraindicated; triptan precaution." },
+    { "id": "MIG-MED-CYP3A4-IND", "name": "CYP3A4 inducers", "category": "medication", "summary": "Rifampicin, carbamazepine, phenytoin — rimegepant efficacy reduced." },
+    { "id": "MIG-MED-CGRP", "name": "CGRP pathway medicines", "category": "medication", "summary": "Other gepants (atogepant), erenumab, fremanezumab, galcanezumab, eptinezumab — outside combined use scope." },
+    { "id": "MIG-MED-PGP", "name": "P-gp & moderate CYP3A4 inhibitors (rimegepant)", "category": "medication", "summary": "Verapamil, erythromycin, ciclosporin, fluconazole taken regularly — rimegepant decline." },
+    { "id": "MIG-MED-PROPRANOLOL", "name": "Propranolol", "category": "medication", "summary": "Rizatriptan declined if on propranolol; sumatriptan/zolmitriptan preferred." },
+    { "id": "MIG-MED-CYP1A2", "name": "CYP1A2 inhibitors", "category": "medication", "summary": "Cimetidine, fluvoxamine — zolmitriptan declined; dose interaction." },
+    { "id": "MIG-MED-OPIOID", "name": "Frequent opioid use", "category": "medication", "summary": "Opioids for headache — MOH risk; not for acute migraine." },
+    { "id": "MIG-CONTEXT-TRIPTAN", "name": "Supplied triptans on SCR (review only)", "category": "medication", "summary": "Sumatriptan, zolmitriptan, rizatriptan, Imigran, Zomig, Maxalt — expected on continuation; does not fail scan." },
+    { "id": "MIG-CONTEXT-RIME", "name": "Rimegepant / Vydura on SCR (review only)", "category": "medication", "summary": "Part B product or existing therapy — flagged for context; does not fail scan." },
+    { "id": "MIG-DX", "name": "Migraine diagnosis (review only)", "category": "condition", "summary": "Positive migraine diagnosis terms — supports continuation context; does not fail scan." }
+  ],
+  "editing": {
+    "rules": "src/conditions/migraine/rules.json",
+    "keywordGroups": "src/conditions/migraine/keyword-groups.json",
+    "source": "EveryDayMeds Migraine Protocol EDM-MIG-01 v2.3 (Triptans + Vydura acute)"
+  }
+}

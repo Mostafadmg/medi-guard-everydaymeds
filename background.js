@@ -16,6 +16,7 @@ if (typeof chrome !== "undefined" && chrome.sidePanel && typeof chrome.sidePanel
 chrome.runtime.onInstalled.addListener(() => {
   console.log("MediGuard AI (EverydayMeds) Installed");
 });
+chrome.storage.local.remove("mgReopenPanel");
 
 // ── NHS SCR session — track tabs opened after "Go to NHS SCR" ───────────────
 const SCR_SESSION_KEY = "scrSession";
@@ -72,6 +73,7 @@ function orderPathname(url) {
 function isScrWorkflowTab(url) {
   if (!url) return false;
   return /portal\.spineservices\.nhs\.uk\/nationalcarerecordsservice/i.test(url)
+    || /national-care-records-service\.nhs\.uk\/nationalcarerecordsservice/i.test(url)
     || /keywords-tool\.html/i.test(url);
 }
 
@@ -693,7 +695,619 @@ async function stopParallelClinicalPool() {
 }
 
 // Forward messages from content script to side panel
+const FIND_PATIENT_RE = /\/nationalcarerecordsservice\/app\/find_patient/;
+const SEARCH_RESULTS_RE = /\/nationalcarerecordsservice\/app\/search_results/;
+const PATIENT_RE = /\/nationalcarerecordsservice\/app\/patient\b/;
+const NHS_FIND_PATIENT_URL = "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/app/find_patient";
+const nhsFillTimers = new Map();
+
+function patientFromScanData(data) {
+  const name = String(data?.patientName || "").trim();
+  if (!name) return null;
+  const parts = name.split(/\s+/).filter(Boolean);
+  const genderRaw = String(data.gender || "").toLowerCase();
+  const gender = genderRaw.startsWith("f") ? "Female" : genderRaw.startsWith("m") ? "Male" : "";
+  if (!parts[0] || parts.length < 2) return null;
+  const currentVital = Array.isArray(data.bmiHistory)
+    ? data.bmiHistory.find((row) => row.isCurrent) || data.bmiHistory[0]
+    : null;
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+    dateOfBirth: data.dob || "",
+    dob: data.dob || "",
+    gender,
+    address: data.address || "",
+    height: data.height || currentVital?.height || "",
+    weight: data.weight || currentVital?.weight || "",
+    bmi: data.bmi != null ? String(data.bmi) : (currentVital?.bmi != null ? String(currentVital.bmi) : ""),
+    heightWeightDate: currentVital?.date || ""
+  };
+}
+
+function readOrderDemographics() {
+  const text = (el) => (el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
+  const blank = (value) => !value || value === "—" || value === "-" || value === "–";
+  const card = document.querySelector(".od2-patient-card") || document.body;
+  const name = text(card.querySelector(".patient-name-text, .od2-patient-name, h3.odhr-pname"));
+  const dobEl = card.querySelector('span.meta-val-text[data-meta="dob"], [data-meta="dob"]');
+  let dob = text(dobEl).replace(/^DOB\s*/i, "");
+  let address = "";
+  card.querySelectorAll(".od2-meta-row").forEach((row) => {
+    const raw = text(row);
+    const value = text(row.querySelector(".val, .meta-val-text"));
+    if (!dob && /^dob\b/i.test(raw)) dob = (value || raw).replace(/^DOB\s*/i, "").trim();
+    if (!address && /^address\b/i.test(raw)) {
+      const body = value && !/^address$/i.test(value) ? value : raw;
+      address = body.replace(/^ADDRESS\s*/i, "").trim();
+    }
+  });
+  let height = "";
+  let weight = "";
+  let bmi = "";
+  let heightWeightDate = "";
+  const table = document.querySelector("table.od2-bmi-table") || document.querySelector("table.odm-bmi-tbl");
+  const rows = table ? Array.from(table.querySelectorAll("tbody tr")) : [];
+  const row = rows.find((entry) => /\bcurrent\b/i.test(text(entry))) || rows[0];
+  if (row) {
+    const dateText = text(row.querySelector("td"));
+    heightWeightDate = (dateText.match(/\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}/) || [])[0] || "";
+    const cols = Array.from(row.querySelectorAll("td.col-num"));
+    const figure = (cell, unit) => {
+      const value = text(cell);
+      const match = value.match(new RegExp(`\\d+(?:\\.\\d+)?\\s*${unit}`, "i"));
+      return match ? match[0].replace(/\s+/g, " ") : "";
+    };
+    bmi = (text(cols[0]).match(/\d+(?:\.\d+)?/) || [])[0] || "";
+    height = figure(cols[1], "cm");
+    weight = figure(cols[2], "kg");
+  }
+  if (blank(dob)) dob = "";
+  if (blank(address)) address = "";
+  return { name, dob, address, height, weight, bmi, heightWeightDate };
+}
+
+function samePatientName(expected, found) {
+  const left = String(expected || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const right = String(found || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (!left || !right) return false;
+  return left === right;
+}
+
+async function readOrderTabDemographics() {
+  const stored = await chrome.storage.session.get(["mgOrderTabId", "mgExpectedPatient"]);
+  const tabId = stored.mgOrderTabId;
+  const tab = tabId ? await tabGet(tabId) : null;
+  if (!tab?.id || !/rx\.everydaymeds\.co\.uk\/order\//i.test(tab.url || "")) return null;
+  try {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: readOrderDemographics
+    });
+    const live = injected?.result || null;
+    const expected = stored.mgExpectedPatient;
+    const expectedName = [expected?.firstName, expected?.lastName].filter(Boolean).join(" ");
+    if (live?.name && expectedName && !samePatientName(expectedName, live.name)) return null;
+    return live;
+  } catch (err) {
+    console.warn("MediGuard could not read this order's BMI row:", err);
+    return null;
+  }
+}
+
+function fillFindPatientMainWorld(patient) {
+  const MONTHS = {
+    jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+    jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12"
+  };
+  function formatDob(p) {
+    if (p.dateOfBirth && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(String(p.dateOfBirth).trim())) {
+      const [d, m, y] = String(p.dateOfBirth).trim().split("/");
+      return `${d.padStart(2, "0")}/${m.padStart(2, "0")}/${y}`;
+    }
+    const raw = String(p.dob || p.dateOfBirth || "").trim();
+    const named = raw.match(/^(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{4})$/);
+    if (named) {
+      const mm = MONTHS[named[2].slice(0, 3).toLowerCase()];
+      if (mm) return `${named[1].padStart(2, "0")}/${mm}/${named[3]}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+      const [y, m, d] = raw.split("-");
+      return `${d}/${m}/${y}`;
+    }
+    return raw;
+  }
+  function clickEl(el) {
+    el.scrollIntoView({ block: "nearest", behavior: "instant" });
+    el.focus();
+    el.click();
+  }
+  function setInputValue(input, value) {
+    const proto = Object.getPrototypeOf(input);
+    const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+    if (setter) setter.call(input, value);
+    else input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  const roleBtn = document.getElementById("confirm-current-role");
+  if (roleBtn) {
+    clickEl(roleBtn.closest("a") || roleBtn);
+    return "role-confirmed";
+  }
+  if (!/\/app\/find_patient/.test(location.pathname)) return "waiting";
+  const firstNameEl = document.querySelector("#advanced-search-form-firstname");
+  if (!firstNameEl) {
+    const tab = document.querySelector("#advanced-search-tab, a#advanced-search-tab, [href='#advanced-search']");
+    if (tab) { clickEl(tab); return "tab-clicked"; }
+    return "form-loading";
+  }
+  const genderSelector = patient.gender === "Male"
+    ? "#advanced-search-form-gender-2"
+    : patient.gender === "Female"
+      ? "#advanced-search-form-gender-1"
+      : "#advanced-search-form-gender-3";
+  const genderRadio = document.querySelector(genderSelector);
+  const lastNameEl = document.querySelector("#advanced-search-form-surname");
+  const dobInput = document.querySelector("#advanced-search-form-dob-single")
+    || document.querySelector("#advanced-search-form input[id*='dob-single']")
+    || document.querySelector("#advanced-search-form input[placeholder*='any format']")
+    || document.querySelector("#advanced-search-form input[placeholder*='Type or paste']");
+  if (!dobInput) {
+    const singleDate = [...document.querySelectorAll("a")].find((link) => {
+      return (link.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === "single date";
+    });
+    if (singleDate) { clickEl(singleDate); return "dob-switched"; }
+  }
+  if (!genderRadio || !lastNameEl || !dobInput) return "form-loading";
+  clickEl(genderRadio);
+  genderRadio.dispatchEvent(new Event("change", { bubbles: true }));
+  setInputValue(firstNameEl, patient.firstName || "");
+  setInputValue(lastNameEl, patient.lastName || "");
+  setInputValue(dobInput, formatDob(patient));
+  const submitBtn = document.querySelector("#advanced-search-form button[type='submit']");
+  if (!submitBtn) return "no-submit";
+  clickEl(submitBtn);
+  return "submitted";
+}
+
+function clickSearchResultMainWorld(patient) {
+  function clickEl(el) {
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+  }
+  if (/\/app\/patient\b/.test(location.pathname)) return "opened";
+  if (window.__mgScrRowClicked) return "waiting-open";
+  const rows = [...document.querySelectorAll(".query-results-table__data-row")];
+  const fallbackRows = rows.length ? rows : [...document.querySelectorAll("table tbody tr")].filter((row) => {
+    const cells = row.querySelectorAll("td");
+    return cells.length >= 4 && /\b(male|female)\b/i.test(row.innerText || "");
+  });
+  if (!fallbackRows.length) return "waiting";
+  const first = String(patient.firstName || "").toLowerCase();
+  const last = String(patient.lastName || "").toLowerCase();
+  const matches = fallbackRows.filter((row) => {
+    const name = (
+      row.querySelector(".query-results-table__data-row-name")?.innerText
+      || row.querySelector("td")?.innerText
+      || ""
+    ).toLowerCase();
+    return name.includes(first) && name.includes(last);
+  });
+  const chosen = matches.length === 1 ? matches[0] : (fallbackRows.length === 1 ? fallbackRows[0] : null);
+  if (!chosen) return matches.length > 1 ? "many" : "waiting";
+  window.__mgScrRowClicked = true;
+  clickEl(chosen.querySelector("a[href]") || chosen);
+  return "clicked";
+}
+
+function openClinicalRecordMainWorld(patient) {
+  function clickEl(el) {
+    el.click();
+  }
+  const pageText = document.body?.innerText || "";
+  if (/General Practice Summary/i.test(pageText)) return "done";
+  if (document.querySelector(".clinicals-page, .scr-print-wrapper, table.scr-table, #AllergiesandAdverseReactions, #CurrentRepeatMedications")) {
+    return "done";
+  }
+  const last = String(patient.lastName || "").toLowerCase();
+  if (last && !pageText.toLowerCase().includes(last)) return "waiting";
+  const yes = document.getElementById("access-management-yes");
+  if (yes) {
+    window.__mgScrYesClicks = (window.__mgScrYesClicks || 0) + 1;
+    if (window.__mgScrYesClicks <= 2) clickEl(yes);
+    return "yes-clicked";
+  }
+  const clinical = document.getElementById("patient-clinicals-navigation-tab")
+    || [...document.querySelectorAll("a, button, [role='tab']")].find((el) =>
+      (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase() === "clinical"
+    );
+  const selected = clinical && (
+    clinical.getAttribute("aria-selected") === "true"
+    || clinical.classList.contains("nhsuk-tab-set__tab--selected")
+    || clinical.getAttribute("aria-current") === "page"
+  );
+  if (clinical && !selected && !window.__mgScrClinicalClicked) {
+    window.__mgScrClinicalClicked = true;
+    clickEl(clinical);
+    return "clinical-clicked";
+  }
+  return "waiting";
+}
+
+async function watchNhsPatientName() {
+  const stored = await chrome.storage.session.get(["mgExpectedPatient"]);
+  const expected = stored.mgExpectedPatient;
+  if (!expected?.firstName || !expected?.lastName) return;
+  const orderName = `${expected.firstName} ${expected.lastName}`.trim();
+  let active = null;
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    active = tab || null;
+  } catch (err) {
+    return;
+  }
+  if (!active?.id || !/nationalcarerecordsservice/.test(active.url || "")) {
+    chrome.runtime.sendMessage({ type: "NHS_NAME_STATUS", status: "clear" }).catch(() => {});
+    return;
+  }
+  const tabs = [active];
+  let mismatch = null;
+  for (const tab of tabs) {
+    if (!tab.id) continue;
+    try {
+      const [injected] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: "MAIN",
+        func: (patient) => {
+          function clean(value) {
+            return String(value || "").replace(/\s+/g, " ").trim();
+          }
+          function labeled(label) {
+            const body = document.body?.innerText || "";
+            const match = body.match(new RegExp("(?:^|\\n)\\s*" + label + "\\s*:\\s*([^\\n]+)", "i"));
+            return match ? clean(match[1]) : "";
+          }
+          function norm(value) {
+            return String(value || "").toLowerCase().replace(/['’]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+          }
+          function firstOf(value) {
+            return norm(value).split(" ").filter(Boolean)[0] || "";
+          }
+          function lastOf(value) {
+            const parts = norm(value).split(" ").filter(Boolean);
+            return parts[parts.length - 1] || "";
+          }
+          function agree(shownFirst, shownLast) {
+            const expectedFirst = firstOf(patient.firstName);
+            const expectedLast = lastOf(patient.lastName);
+            const pageFirst = firstOf(shownFirst);
+            const pageLast = lastOf(shownLast || shownFirst);
+            if (!pageFirst || !pageLast || !expectedFirst || !expectedLast) return "empty";
+            return pageFirst === expectedFirst && pageLast === expectedLast ? "match" : "mismatch";
+          }
+          const rows = [...document.querySelectorAll("table tbody tr")].filter((row) => {
+            return row.querySelectorAll("td").length >= 4 && /\b(male|female)\b/i.test(row.innerText || "");
+          });
+          const page = {
+            formFirst: clean(document.querySelector("#advanced-search-form-firstname")?.value),
+            formLast: clean(document.querySelector("#advanced-search-form-surname")?.value),
+            criteriaFirst: labeled("First name"),
+            criteriaLast: labeled("Last name"),
+            rowNames: rows.map((row) => clean(row.querySelector("td")?.innerText)).filter(Boolean)
+          };
+          const rowCheck = page.rowNames.length === 1 ? agree(page.rowNames[0], page.rowNames[0]) : "empty";
+          const checks = [
+            agree(page.formFirst, page.formLast),
+            agree(page.criteriaFirst, page.criteriaLast),
+            rowCheck
+          ].filter((status) => status !== "empty");
+          const status = !checks.length ? "empty" : (checks.includes("mismatch") ? "mismatch" : "match");
+          const pageName = (page.rowNames.length === 1 && rowCheck === "mismatch" ? page.rowNames[0] : "")
+            || [page.criteriaFirst, page.criteriaLast].filter(Boolean).join(" ")
+            || [page.formFirst, page.formLast].filter(Boolean).join(" ")
+            || "";
+          const orderName = `${patient.firstName} ${patient.lastName}`.trim();
+          const existing = document.getElementById("mg-name-mismatch");
+          if (status !== "mismatch") {
+            existing?.remove();
+          } else {
+            const banner = existing || document.createElement("div");
+            banner.id = "mg-name-mismatch";
+            banner.setAttribute("role", "alert");
+            banner.style.cssText = "position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2147483647;max-width:560px;background:#7f1d1d;color:#fff;padding:12px 16px;border-radius:10px;font:600 14px/1.45 Segoe UI,system-ui,sans-serif;box-shadow:0 10px 28px rgba(0,0,0,.28);";
+            banner.textContent = `Names don't match. This page shows ${pageName || "a different patient"}. The order is ${orderName}. Refresh the page.`;
+            if (!existing) document.documentElement.appendChild(banner);
+          }
+          return { status, pageName };
+        },
+        args: [expected]
+      });
+      if (injected?.result?.status === "mismatch") mismatch = injected.result;
+    } catch (err) {
+      // Page scripts are not ready on every navigation.
+    }
+  }
+  chrome.runtime.sendMessage({
+    type: "NHS_NAME_STATUS",
+    status: mismatch ? "mismatch" : "match",
+    pageName: mismatch?.pageName || "",
+    orderName
+  }).catch(() => {});
+}
+
+setInterval(() => {
+  watchNhsPatientName().catch(() => {});
+}, 1200);
+chrome.tabs.onActivated.addListener(() => {
+  watchNhsPatientName().catch(() => {});
+});
+
+function scheduleNhsPrefill(tabId) {
+  if (nhsFillTimers.has(tabId)) clearTimeout(nhsFillTimers.get(tabId));
+  let attempts = 0;
+  const tick = async () => {
+    attempts += 1;
+    const stored = await chrome.storage.session.get(["pendingNhsPatient", "nhsPrefillTabId"]);
+    const patient = stored.pendingNhsPatient;
+    if (!patient || stored.nhsPrefillTabId !== tabId) return;
+    const tab = await tabGet(tabId);
+    if (!tab || tab.status !== "complete") {
+      if (attempts < 160) nhsFillTimers.set(tabId, setTimeout(tick, 250));
+      return;
+    }
+    const url = tab.url || "";
+    const onNhs = /nationalcarerecordsservice/.test(url);
+    try {
+      if (SEARCH_RESULTS_RE.test(url)) {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          func: clickSearchResultMainWorld,
+          args: [patient]
+        });
+        const result = injected?.result;
+        if (result === "many") {
+          await chrome.storage.session.set({ pendingNhsPatient: null });
+          nhsFillTimers.delete(tabId);
+          return;
+        }
+        if (result === "clicked" || result === "opened" || result === "waiting-open") {
+          if (attempts < 40) nhsFillTimers.set(tabId, setTimeout(tick, 1000));
+          return;
+        }
+      } else if (PATIENT_RE.test(url)) {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          func: openClinicalRecordMainWorld,
+          args: [patient]
+        });
+        const result = injected?.result;
+        if (result === "done" || result === "waiting") {
+          await chrome.storage.session.set({ pendingNhsPatient: null });
+          nhsFillTimers.delete(tabId);
+          return;
+        }
+        if (result === "clinical-clicked" || result === "yes-clicked" || result === "waiting-modal") {
+          if (attempts < 160) nhsFillTimers.set(tabId, setTimeout(tick, 700));
+          return;
+        }
+      } else if (onNhs) {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId },
+          world: "MAIN",
+          func: fillFindPatientMainWorld,
+          args: [patient]
+        });
+        const result = injected?.result;
+        if (result === "submitted" || result === "role-confirmed" || result === "dob-switched") {
+          if (attempts < 120) nhsFillTimers.set(tabId, setTimeout(tick, result === "role-confirmed" ? 700 : 400));
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("MediGuard NHS prefill failed:", err);
+    }
+    if (attempts < 120) nhsFillTimers.set(tabId, setTimeout(tick, 250));
+  };
+  tick();
+}
+
+let keywordToolTabId = null;
+
+function tabSend(tabId, message) {
+  return new Promise((resolve) => {
+    chrome.tabs.sendMessage(tabId, message, (resp) => {
+      if (chrome.runtime.lastError) resolve(null);
+      else resolve(resp || null);
+    });
+  });
+}
+
+function waitForTabComplete(tabId) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    }, 5000);
+    function onUpdated(id, info) {
+      if (id === tabId && info.status === "complete") {
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(onUpdated);
+        resolve();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(onUpdated);
+  });
+}
+
+async function showKeywordTool(html, focus) {
+  const stored = await chrome.storage.session.get(["mgExpectedPatient"]);
+  const patient = { ...(stored.mgExpectedPatient || {}) };
+  const live = await readOrderTabDemographics();
+  if (live) {
+    if (live.dob) patient.dateOfBirth = patient.dob = live.dob;
+    if (live.address) patient.address = live.address;
+    if (live.height) patient.height = live.height;
+    if (live.weight) patient.weight = live.weight;
+    if (live.bmi) patient.bmi = live.bmi;
+    if (live.heightWeightDate) patient.heightWeightDate = live.heightWeightDate;
+    await chrome.storage.session.set({ mgExpectedPatient: patient });
+  }
+  await chrome.storage.session.set({
+    scrPendingHtml: html,
+    scrPendingPatient: {
+      firstName: patient.firstName || "",
+      lastName: patient.lastName || "",
+      dateOfBirth: patient.dateOfBirth || patient.dob || "",
+      dob: patient.dob || patient.dateOfBirth || "",
+      address: patient.address || "",
+      gender: patient.gender || "",
+      height: patient.height || "",
+      weight: patient.weight || "",
+      bmi: patient.bmi || "",
+      heightWeightDate: patient.heightWeightDate || ""
+    }
+  });
+  const url = chrome.runtime.getURL("keywords-tool.html");
+  let tab = keywordToolTabId ? await tabGet(keywordToolTabId) : null;
+  if (!tab?.id) {
+    tab = await new Promise((resolve) => {
+      chrome.tabs.create({ url, active: focus === true }, (created) => resolve(created || null));
+    });
+    if (!tab?.id) return;
+    keywordToolTabId = tab.id;
+    await waitForTabComplete(tab.id);
+  } else if (focus) {
+    await new Promise((resolve) => chrome.tabs.update(tab.id, { active: true }, () => resolve()));
+  }
+  const payload = {
+    action: "renderSCRContent",
+    content: html,
+    userData: {
+      firstName: patient.firstName || "",
+      lastName: patient.lastName || "",
+      dateOfBirth: patient.dateOfBirth || patient.dob || "",
+      dob: patient.dob || patient.dateOfBirth || "",
+      address: patient.address || "",
+      gender: patient.gender || "",
+      height: patient.height || "",
+      weight: patient.weight || "",
+      bmi: patient.bmi || "",
+      heightWeightDate: patient.heightWeightDate || ""
+    }
+  };
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const resp = await tabSend(tab.id, payload);
+    if (resp?.success) return;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+}
+
+function injectScrScan(tabId) {
+  chrome.scripting.executeScript({
+    target: { tabId },
+    files: ["scr/capture.js"]
+  }).catch((err) => console.warn("MediGuard SCR capture inject failed:", err));
+}
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const url = changeInfo.url || tab?.url || "";
+  if (!/nationalcarerecordsservice/.test(url)) return;
+  if (PATIENT_RE.test(url)) injectScrScan(tabId);
+  if (changeInfo.status !== "complete") return;
+  scheduleNhsPrefill(tabId);
+});
+
+chrome.tabs.query({
+  url: [
+    "https://national-care-records-service.nhs.uk/nationalcarerecordsservice/app/patient*",
+    "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/app/patient*"
+  ]
+}, (tabs) => {
+  (tabs || []).forEach((tab) => { if (tab.id) injectScrScan(tab.id); });
+});
+
+async function openNhsScrFromOrder(message, sender) {
+  await chrome.storage.session.set({ mgScrDeliveredTabs: [] });
+  let patient = message.patient;
+  if (!patient?.firstName || !patient?.lastName || !(patient.dateOfBirth || patient.dob)) {
+    const orderTabs = await tabsQuery({ url: "https://rx.everydaymeds.co.uk/order/*" });
+    const orderTab = orderTabs.find((t) => t.active) || orderTabs[0];
+    if (orderTab?.id) {
+      try {
+        const resp = await chrome.tabs.sendMessage(orderTab.id, { type: "GET_SCAN_DATA" });
+        patient = patientFromScanData(resp?.data);
+      } catch (err) {
+        console.warn("MediGuard could not read the order page:", err);
+      }
+    }
+  }
+  if (!patient?.firstName || !patient?.lastName) {
+    return { success: false, error: "Open an order first so the name and date of birth can be filled in." };
+  }
+  const tab = await new Promise((resolve) => {
+    chrome.tabs.create({ url: NHS_FIND_PATIENT_URL, active: true }, (created) => {
+      if (chrome.runtime.lastError) resolve(null);
+      else resolve(created);
+    });
+  });
+  if (!tab?.id) return { success: false, error: "Could not open NHS SCR" };
+  const sessionPatch = {
+    pendingNhsPatient: patient,
+    nhsPrefillTabId: tab.id,
+    mgExpectedPatient: patient
+  };
+  if (sender.tab?.id && /rx\.everydaymeds\.co\.uk\/order\//i.test(sender.tab.url || "")) {
+    sessionPatch.mgOrderTabId = sender.tab.id;
+  }
+  await chrome.storage.session.set(sessionPatch);
+  await addOpenedTab(tab.id);
+  scheduleNhsPrefill(tab.id);
+  return { success: true, tabId: tab.id };
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "SCR_HTML_READY" && message.html) {
+    const nhsTabId = sender.tab?.id;
+    chrome.storage.session.get("mgScrDeliveredTabs", (stored) => {
+      const list = stored.mgScrDeliveredTabs || [];
+      if (nhsTabId && list.includes(nhsTabId)) return;
+      showKeywordTool(message.html, true)
+        .then(() => {
+          if (!nhsTabId) return;
+          chrome.storage.session.set({ mgScrDeliveredTabs: [...list, nhsTabId] });
+        })
+        .catch((err) => console.warn("MediGuard keyword tool failed:", err));
+    });
+  }
+
+  if (message.type === "OPEN_NHS_SCR") {
+    openNhsScrFromOrder(message, sender)
+      .then(sendResponse)
+      .catch((e) => sendResponse({ success: false, error: e?.message || "Could not open NHS SCR" }));
+    return true;
+  }
+
+  if (message.type === "ORDER_URL_CHANGED") {
+    chrome.storage.session.remove(["mgExpectedPatient", "pendingNhsPatient"]);
+    chrome.storage.session.set({
+      mgOrderTabId: sender.tab?.id || null,
+      mgOrderUrl: message.url || sender.tab?.url || ""
+    });
+  }
+
+  if (message.type === "ORDER_DATA_SCANNED" && message.data?.patientName) {
+    const scanned = patientFromScanData(message.data);
+    const orderUrl = message.data.pageUrl || sender.tab?.url || "";
+    if (scanned) scanned.orderUrl = orderUrl;
+    chrome.storage.session.set({
+      mgExpectedPatient: scanned || null,
+      mgOrderTabId: sender.tab?.id || null,
+      mgOrderUrl: orderUrl
+    }, () => watchNhsPatientName().catch(() => {}));
+  }
+
   if (
     message.type === "ORDER_DATA_SCANNED" ||
     message.type === "TAB_COMPLETION_CHANGED" ||

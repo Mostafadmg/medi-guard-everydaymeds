@@ -1,0 +1,12 @@
+{
+  "name": "medi-guard-everydaymeds",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clinical:parallel": "node tools/parallel-clinical-browser.mjs",
+    "clinical:drain": "node tools/drain-clinical-queue.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

@@ -1,0 +1,105 @@
+[
+  {
+    "id": "pregnancy-birth",
+    "label": "Pregnancy, breastfeeding & recent birth",
+    "keywords": [
+      "pregn", "gestation", "breastfeeding", "lactation", "postpartum", "given birth"
+    ]
+  },
+  {
+    "id": "thrombosis",
+    "label": "Blood clots / thrombophilia",
+    "keywords": [
+      "venous thromboembolism", "VTE", "DVT", "pulmonary embolism", "PE",
+      "thrombophilia", "antiphospholipid", "retinal thrombosis", "Factor V Leiden"
+    ]
+  },
+  {
+    "id": "arterial",
+    "label": "Arterial disease",
+    "keywords": [
+      "myocardial infarction", "heart attack", "angina", "stroke", "TIA",
+      "cerebrovascular accident", "arterial thrombosis"
+    ]
+  },
+  {
+    "id": "liver",
+    "label": "Liver disease",
+    "keywords": [
+      "cirrhosis", "hepatitis", "jaundice", "cholestasis", "hepatic adenoma",
+      "liver tumour", "obstetric cholestasis", "pemphigoid gestationis",
+      "Dubin-Johnson", "Rotor syndrome"
+    ]
+  },
+  {
+    "id": "cancer",
+    "label": "Cancer & breast red flags",
+    "keywords": [
+      "breast cancer", "endometrial cancer", "ovarian cancer", "cervical cancer",
+      "breast lump", "nipple discharge", "chemotherapy", "immunotherapy", "malignancy"
+    ]
+  },
+  {
+    "id": "bleeding",
+    "label": "Abnormal bleeding",
+    "keywords": [
+      "intermenstrual bleeding", "abnormal uterine bleeding", "postmenopausal bleeding",
+      "bleeding between periods", "endometrial hyperplasia"
+    ]
+  },
+  {
+    "id": "vte-risk-conditions",
+    "label": "VTE-risk conditions (IBD, SLE, sickle cell, etc.)",
+    "keywords": [
+      "ulcerative colitis", "Crohn", "systemic lupus", "SLE", "sickle cell",
+      "rheumatoid arthritis", "hypertension", "dyslipidaemia", "migraine",
+      "porphyria", "gallstone", "cholecystitis", "diabetes", "heart failure"
+    ]
+  },
+  {
+    "id": "anticoagulants",
+    "label": "Anticoagulants",
+    "keywords": [
+      "warfarin", "apixaban", "rivaroxaban", "edoxaban", "dabigatran",
+      "enoxaparin", "dalteparin", "heparin", "fondaparinux"
+    ]
+  },
+  {
+    "id": "antiepileptics",
+    "label": "Antiepileptic medicines",
+    "keywords": [
+      "carbamazepine", "phenytoin", "lamotrigine", "levetiracetam", "topiramate",
+      "sodium valproate", "gabapentin", "pregabalin"
+    ]
+  },
+  {
+    "id": "enzyme-inducers",
+    "label": "Enzyme inducers",
+    "keywords": [
+      "rifampicin", "rifabutin", "efavirenz", "ritonavir", "St John's Wort", "bosentan"
+    ]
+  },
+  {
+    "id": "hormonal-contraception",
+    "label": "Hormonal contraception",
+    "keywords": [
+      "combined pill", "microgynon", "cerazette", "nexplanon", "depo-provera",
+      "mirena", "evra", "nuvaring", "hormonal coil", "ethinylestradiol"
+    ]
+  },
+  {
+    "id": "oncology-meds",
+    "label": "Cancer treatments",
+    "keywords": [
+      "tamoxifen", "anastrozole", "letrozole", "goserelin", "leuprorelin",
+      "abiraterone", "enzalutamide"
+    ]
+  },
+  {
+    "id": "norethisterone",
+    "label": "Norethisterone / period delay",
+    "keywords": [
+      "norethisterone", "utovlan", "primolut", "period delay"
+    ]
+  }
+]

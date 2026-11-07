@@ -1,0 +1,318 @@
+{
+  "conditionId": "premature-ejaculation",
+  "label": "Premature Ejaculation",
+  "protocol": "EDM-PE-01 — Premature Ejaculation (dapoxetine)",
+  "products": [
+    "Dapoxetine",
+    "Priligy"
+  ],
+  "notes": [
+    "Three outcomes: reject (block), flag (prescriber review), counsel (counselling text).",
+    "fail_if_found is true only where outcome is reject (ED matcher compatibility).",
+    "Negation and family-history context downgrade reject to flag, except PE-EYE-GLAUCOMA family history which stays reject.",
+    "Markdown protocol: src/conditions/md-rules/premature-ejaculation.md"
+  ],
+  "ruleGuide": [
+    {
+      "id": "PE-CV-CARDIAC",
+      "name": "Significant cardiac disease",
+      "category": "condition",
+      "summary": "S5 — Significant heart disease",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-CV-HYPOTENSION",
+      "name": "Low blood pressure and orthostatic intolerance",
+      "category": "condition",
+      "summary": "S5 — Low blood pressure (below 90/50) or tendency to faint on standing",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-CV-SYNCOPE-RECURRENT",
+      "name": "Recurrent or unexplained syncope",
+      "category": "condition",
+      "summary": "S5 — Recurrent syncope (revised two-tier rule)",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-CV-SYNCOPE-SINGLE",
+      "name": "Isolated vasovagal syncope with identified trigger",
+      "category": "condition",
+      "summary": "S5 / S9 — Flagged tier of the two-tier syncope rule",
+      "outcome": "flag"
+    },
+    {
+      "id": "PE-CV-HYPERTENSION-TREATED",
+      "name": "Treated hypertension",
+      "category": "condition",
+      "summary": "S7 — Blood-pressure-lowering medicines",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-BP-NUMERIC",
+      "name": "Recorded blood pressure value",
+      "category": "measurement",
+      "summary": "S5 — Low blood pressure (below 90/50)",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-BP-POSTURAL-TEXT",
+      "name": "Recorded postural blood pressure assessment",
+      "category": "measurement",
+      "summary": "S1 / S12 — Orthostatic screening gap",
+      "outcome": "flag"
+    },
+    {
+      "id": "PE-PSY-CONDITION",
+      "name": "Psychiatric contraindications",
+      "category": "condition",
+      "summary": "S5 — Severe depression, mania, bipolar disorder, schizophrenia",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-PSY-SELFHARM",
+      "name": "Self-harm and suicidality",
+      "category": "condition",
+      "summary": "S5 — Severe depression; S6 — psychiatric adverse effects",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-PSY-HISTORICAL",
+      "name": "Historical or non-severe depression",
+      "category": "condition",
+      "summary": "S9 — Worked scenario 5 (resolved single episode)",
+      "outcome": "flag"
+    },
+    {
+      "id": "PE-NEURO-EPILEPSY",
+      "name": "Epilepsy and seizure disorders",
+      "category": "condition",
+      "summary": "S5 — Epilepsy",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-LIVER",
+      "name": "Hepatic impairment",
+      "category": "condition",
+      "summary": "S5 — Moderate or severe liver problems",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-RENAL",
+      "name": "Renal impairment",
+      "category": "condition",
+      "summary": "S5 — Kidney problems",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-RENAL-NUMERIC",
+      "name": "Recorded eGFR value",
+      "category": "measurement",
+      "summary": "S5 — Kidney problems",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-EYE-GLAUCOMA",
+      "name": "Glaucoma and raised intraocular pressure",
+      "category": "condition",
+      "summary": "S5 — History of glaucoma, raised IOP, or told at increased risk",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-EYE-DROPS",
+      "name": "Topical glaucoma treatments",
+      "category": "medication",
+      "summary": "S5 — Glaucoma (corroborating signal)",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-HAEM-BLEEDING",
+      "name": "Bleeding and clotting disorders",
+      "category": "condition",
+      "summary": "S5 — History of bleeding or clotting problems",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-URO-PROSTATE",
+      "name": "Prostate conditions",
+      "category": "condition",
+      "summary": "S5 — Prostate problems",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-URO-GU",
+      "name": "Genitourinary symptoms and infection",
+      "category": "condition",
+      "summary": "S5 — Pain on ejaculation, or difficulty/pain passing urine",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-URO-ED",
+      "name": "Erectile dysfunction",
+      "category": "condition",
+      "summary": "S5 — Erectile dysfunction, whether treated or untreated",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-METAB-GALACTOSE",
+      "name": "Galactose intolerance and lactose-related disorders",
+      "category": "condition",
+      "summary": "S5 — Galactose intolerance, Lapp lactase deficiency, glucose-galactose malabsorption",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-METAB-THYROID",
+      "name": "Thyroid dysfunction",
+      "category": "condition",
+      "summary": "S5 — Acquired PE (proposed row)",
+      "outcome": "flag"
+    },
+    {
+      "id": "PE-MED-MAOI",
+      "name": "MAOIs and reversible MAO inhibitors",
+      "category": "medication",
+      "summary": "S7 — MAOIs",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-ANTIDEPRESSANT",
+      "name": "Antidepressants of all classes",
+      "category": "medication",
+      "summary": "S7 — SSRIs, SNRIs, TCAs and other antidepressants",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-ANTIPSYCHOTIC",
+      "name": "Antipsychotics and lithium",
+      "category": "medication",
+      "summary": "S7 — Thioridazine and lithium (service extension to the class)",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-TRIPTAN",
+      "name": "Triptans",
+      "category": "medication",
+      "summary": "S7 — Triptans",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-SEROTONERGIC-OTHER",
+      "name": "Other serotonergic agents",
+      "category": "medication",
+      "summary": "S7 — St John's Wort, L-tryptophan, tramadol",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-CYP3A4-POTENT",
+      "name": "Potent CYP3A4 inhibitors",
+      "category": "medication",
+      "summary": "S7 — Potent CYP3A4 inhibitors",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-CYP3A4-MODERATE",
+      "name": "Moderate CYP3A4 inhibitors",
+      "category": "medication",
+      "summary": "S7 — Moderate CYP3A4 inhibitors",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-NITRATE",
+      "name": "Nitrates and nitric oxide donors",
+      "category": "medication",
+      "summary": "S7 — Blood-pressure-lowering and vasodilating medicines",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-ALPHA",
+      "name": "Alpha-blockers",
+      "category": "medication",
+      "summary": "S7 — Alpha-blockers",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-BP",
+      "name": "Antihypertensives and rate-controlling medicines",
+      "category": "medication",
+      "summary": "S7 — Blood-pressure-lowering medicines; medicines affecting heart rate or rhythm",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-PDE5",
+      "name": "PDE5 inhibitors and other ED treatments",
+      "category": "medication",
+      "summary": "S7 — PDE5 inhibitors",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-ANTICOAG",
+      "name": "Anticoagulants, antiplatelets and NSAIDs",
+      "category": "medication",
+      "summary": "S7 — Warfarin, NSAIDs, aspirin",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-ASPIRIN-LOWDOSE",
+      "name": "Low-dose aspirin",
+      "category": "medication",
+      "summary": "S7 — Warfarin, NSAIDs, aspirin (split pending Clinical Lead decision)",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-SEDATIVE",
+      "name": "Prescribed sedatives and opioids",
+      "category": "medication",
+      "summary": "S8 Step 6 — sedatives (separated from recreational drugs)",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-MED-RECREATIONAL",
+      "name": "Recreational and non-prescribed substances",
+      "category": "condition",
+      "summary": "S8 Step 6 — recreational drugs",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-COUNSEL-ALCOHOL",
+      "name": "Alcohol use",
+      "category": "condition",
+      "summary": "S7 — Alcohol (COUNSEL)",
+      "outcome": "counsel"
+    },
+    {
+      "id": "PE-FLAG-FINASTERIDE-1MG",
+      "name": "Finasteride 1 mg for hair loss — NOT an exclusion",
+      "category": "medication",
+      "summary": "S7 — Alpha-blocker row, finasteride note",
+      "outcome": "none"
+    },
+    {
+      "id": "PE-MED-FINASTERIDE-5MG",
+      "name": "Finasteride 5 mg and dutasteride",
+      "category": "medication",
+      "summary": "S5 — Prostate problems",
+      "outcome": "reject"
+    },
+    {
+      "id": "PE-FLAG-ACQUIRED-PE",
+      "name": "Indicators of acquired premature ejaculation",
+      "category": "condition",
+      "summary": "S5 — Acquired PE (proposed row)",
+      "outcome": "flag"
+    },
+    {
+      "id": "PE-ALLERGY-DAPOXETINE",
+      "name": "Allergy to dapoxetine",
+      "category": "condition",
+      "summary": "S5 — Allergy to dapoxetine",
+      "outcome": "reject"
+    }
+  ],
+  "editing": {
+    "rules": "src/conditions/premature-ejaculation/rules.json",
+    "keywordGroups": "src/conditions/premature-ejaculation/keyword-groups.json",
+    "protocolAdvice": "src/conditions/premature-ejaculation/protocol-advice.json",
+    "markdown": "src/conditions/md-rules/premature-ejaculation.md",
+    "source": "EveryDayMeds Premature Ejaculation Protocol EDM-PE-01"
+  }
+}

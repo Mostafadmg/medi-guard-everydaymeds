@@ -19,7 +19,13 @@ function isRxOrderUrl(url) {
 }
 function scanMessageFromBoundTab(msg) {
   if (!msg || msg.tabId == null) return false;
-  if (panelBoundTabId == null) return false;
+  const url = msg.tabUrl || msg.data?.pageUrl || "";
+  if (url && !isRxOrderUrl(url)) return false;
+  if (panelBoundTabId == null) {
+    panelBoundTabId = msg.tabId;
+    panelBoundOrderPath = orderPathFromUrl(url);
+    return true;
+  }
   return msg.tabId === panelBoundTabId;
 }
 function bindPanelToTab(tab) {
@@ -28,9 +34,21 @@ function bindPanelToTab(tab) {
   panelBoundOrderPath = orderPathFromUrl(tab.url);
   return true;
 }
+const hostWindowId = Number(new URLSearchParams(location.search).get("hostWindow")) || null;
 function queryActiveTab() {
   return new Promise((resolve) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => resolve(tabs[0] || null));
+    const pickOrder = (tabs) => (tabs || []).find((tab) => isRxOrderUrl(tab.url)) || null;
+    if (hostWindowId) {
+      chrome.tabs.query({ active: true, windowId: hostWindowId }, (tabs) => resolve(pickOrder(tabs) || (tabs && tabs[0]) || null));
+      return;
+    }
+    chrome.tabs.query({ active: true, lastFocusedWindow: true }, (focused) => {
+      const focusedOrder = pickOrder(focused);
+      if (focusedOrder) { resolve(focusedOrder); return; }
+      chrome.tabs.query({ url: "https://rx.everydaymeds.co.uk/order/*" }, (orders) => {
+        resolve((orders || []).find((tab) => tab.active) || (orders || [])[0] || (focused && focused[0]) || null);
+      });
+    });
   });
 }
 async function resolveContentTabId(preferredTabId) {
@@ -296,6 +314,22 @@ function renderBanner(data) {
       dobEl.style.display = "flex";
     } else {
       dobEl.style.display = "none";
+    }
+  }
+
+  let addressEl = document.getElementById("pb-address");
+  if (!addressEl && dobEl) {
+    addressEl = document.createElement("div");
+    addressEl.id = "pb-address";
+    addressEl.className = "pb-dob";
+    dobEl.insertAdjacentElement("afterend", addressEl);
+  }
+  if (addressEl) {
+    if (data.address) {
+      addressEl.textContent = data.address;
+      addressEl.style.display = "block";
+    } else {
+      addressEl.style.display = "none";
     }
   }
 
@@ -1433,27 +1467,158 @@ function goToTab(tab) {
     .catch(() => toast("Could not navigate — open an order page first", "error"));
 }
 
+// ── SCR condition + open the same find-patient page as Go to NHS SCR ──
+const NHS_FIND_PATIENT_URL = "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/app/find_patient";
+const SCR_CONDITION_KEY = "edmSelectedCondition";
+const SCR_CONDITIONS = [
+  { id: "weight-loss", label: "Weight Loss", icon: "⚖️" },
+  { id: "period-delay", label: "Period Delay", icon: "📅" },
+  { id: "erectile-dysfunction", label: "Erectile Dysfunction", icon: "💊" },
+  { id: "migraine", label: "Migraine", icon: "🧠" },
+  { id: "premature-ejaculation", label: "Premature Ejaculation", icon: "🩺" },
+  { id: "hair-loss", label: "Hair Loss", icon: "💇" }
+];
+
+function renderScrScan(msg) {
+  const box = document.getElementById("scr-scan");
+  const title = document.getElementById("scr-scan-title");
+  const count = document.getElementById("scr-scan-count");
+  const products = document.getElementById("scr-scan-products");
+  const empty = document.getElementById("scr-scan-empty");
+  const list = document.getElementById("scr-scan-list");
+  if (!box || !list) return;
+  box.classList.add("is-on");
+  const findings = Array.isArray(msg.findings) ? msg.findings : [];
+  if (title) title.textContent = `${msg.conditionLabel || "SCR"} keyword scan`;
+  if (count) count.textContent = findings.length ? `${findings.length} match${findings.length === 1 ? "" : "es"}` : "Clear";
+  if (products) {
+    const names = {
+      mounjaro: "Mounjaro",
+      wegovy_inj: "Wegovy inj",
+      wegovy_tab: "Wegovy tab",
+      foundayo: "Foundayo",
+      finasteride: "Finasteride",
+      minoxidil_solution: "Minoxidil solution",
+      minoxidil_foam: "Minoxidil foam"
+    };
+    products.innerHTML = "";
+    Object.entries(msg.productVerdicts || {}).forEach(([id, verdict]) => {
+      const pill = document.createElement("span");
+      pill.className = `scr-scan-pill is-${verdict}`;
+      pill.textContent = `${names[id] || id}: ${verdict}`;
+      products.appendChild(pill);
+    });
+  }
+  if (empty) empty.hidden = findings.length > 0;
+  list.innerHTML = "";
+  findings.forEach((finding) => {
+    const item = document.createElement("li");
+    item.className = `scr-scan-item is-${finding.outcome || "flag"}`;
+    const name = document.createElement("strong");
+    name.textContent = finding.ruleName || finding.ruleId;
+    const detail = document.createElement("span");
+    detail.textContent = [finding.keyword, finding.snippet].filter(Boolean).join(" — ");
+    item.append(name, detail);
+    list.appendChild(item);
+  });
+}
+
+function openNhsScr() {
+  const patient = patientFromScan(typeof currentOrderData !== "undefined" ? currentOrderData : null);
+  chrome.runtime.sendMessage({ type: "OPEN_NHS_SCR", patient }, (resp) => {
+    if (chrome.runtime.lastError || !resp?.success) {
+      toast(resp?.error || "Could not open NHS SCR", "error");
+    }
+  });
+}
+
+function patientFromScan(data) {
+  const name = String(data?.patientName || "").trim();
+  if (!name) return null;
+  const parts = name.split(/\s+/).filter(Boolean);
+  const genderRaw = String(data.gender || "").toLowerCase();
+  const gender = genderRaw.startsWith("f") ? "Female" : genderRaw.startsWith("m") ? "Male" : "";
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+    dateOfBirth: data.dob || "",
+    dob: data.dob || "",
+    address: data.address || "",
+    gender,
+    height: data.height || "",
+    weight: data.weight || "",
+    bmi: data.bmi != null ? String(data.bmi) : "",
+    heightWeightDate: data.bmiHistory?.find((row) => row.isCurrent)?.date || ""
+  };
+}
+
+function initScrConditionPicker() {
+  const root = document.getElementById("scr-condition");
+  const toggle = document.getElementById("scr-condition-toggle");
+  const menu = document.getElementById("scr-condition-menu");
+  const valueEl = document.getElementById("scr-condition-value");
+  const iconEl = document.getElementById("scr-condition-icon");
+  if (!root || !toggle || !menu || !valueEl || !iconEl) return;
+
+  function setOpen(open) {
+    root.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    menu.hidden = !open;
+  }
+
+  function paint(activeId) {
+    const active = SCR_CONDITIONS.find((c) => c.id === activeId) || SCR_CONDITIONS[0];
+    valueEl.textContent = active.label;
+    iconEl.textContent = active.icon;
+    menu.querySelectorAll(".scr-select-option").forEach((btn) => {
+      const on = btn.dataset.id === active.id;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+  }
+
+  menu.innerHTML = "";
+  SCR_CONDITIONS.forEach((condition) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "scr-select-option";
+    btn.dataset.id = condition.id;
+    btn.setAttribute("role", "option");
+    btn.innerHTML = `<span aria-hidden="true">${condition.icon}</span><span>${condition.label}</span>`;
+    btn.addEventListener("click", async () => {
+      await chrome.storage.local.set({ [SCR_CONDITION_KEY]: condition.id });
+      paint(condition.id);
+      setOpen(false);
+    });
+    menu.appendChild(btn);
+  });
+
+  toggle.addEventListener("click", () => setOpen(menu.hidden));
+  document.addEventListener("click", (event) => {
+    if (!root.contains(event.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") setOpen(false);
+  });
+
+  chrome.storage.local.get(SCR_CONDITION_KEY, (data) => {
+    paint(data[SCR_CONDITION_KEY] || "weight-loss");
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[SCR_CONDITION_KEY]) {
+      paint(changes[SCR_CONDITION_KEY].newValue || "weight-loss");
+    }
+  });
+}
+
 // ── Reload extension (re-reads files from the unpacked folder) ──────────────
 // Chrome re-reads whatever files are currently on disk — same as clicking
 // "Reload" on chrome://extensions. Also re-injects the bundled content script
 // into the active tab so the page picks up changes without a manual refresh.
-async function reloadExtension() {
+function reloadExtension() {
   toast("Reloading extension…", "default", 1500);
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id && /^https?:/.test(tab.url || "")) {
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ["content.js"]
-      }).catch(err => console.warn("MediGuard: content.js re-injection failed:", err));
-    }
-  } catch (e) {
-    console.warn("MediGuard: re-inject step failed:", e);
-  }
-  setTimeout(() => {
-    try { chrome.runtime.reload(); }
-    catch (e) { toast("Could not reload: " + (e.message || "unknown"), "error"); }
-  }, 250);
+  try { chrome.runtime.reload(); }
+  catch (e) { toast("Could not reload: " + (e.message || "unknown"), "error"); }
 }
 
 // ── Bulk Approve all / Undo all ─────────────────
@@ -1884,16 +2049,17 @@ async function sendChat(text) {
 //  SCAN
 // ═══════════════════════════════════════════════
 
-async function doScan() {
+async function doScan(options = {}) {
+  const quiet = options.quiet === true;
   const handle = (resp) => {
     if (resp && resp.data) {
       currentOrderData = resp.data;
       renderBanner(currentOrderData);
       showWorkflow(currentOrderData);
-      toast("Scan complete", "success");
-    } else if (resp && resp.error) {
+      if (!quiet) toast("Scan complete", "success");
+    } else if (!quiet && resp && resp.error) {
       toast(resp.error, "error");
-    } else {
+    } else if (!quiet) {
       toast("No order found — open an order on rx.everydaymeds.co.uk", "error");
     }
   };
@@ -1901,7 +2067,7 @@ async function doScan() {
     try {
       const tabId = await resolveContentTabId(panelBoundTabId);
       if (!tabId) {
-        toast("No order tab — open an order on rx.everydaymeds.co.uk", "error");
+        if (!quiet) toast("No order tab — open an order on rx.everydaymeds.co.uk", "error");
         return;
       }
       panelBoundTabId = tabId;
@@ -1923,7 +2089,7 @@ async function doScan() {
         return;
       }
     } catch {}
-    toast("Could not connect — open an order or the prescription queue", "error");
+    if (!quiet) toast("Could not connect — open an order or the prescription queue", "error");
   } else {
     msgContent({ type: "GET_SCAN_DATA" }).then(handle);
   }
@@ -1969,12 +2135,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("refresh-btn")?.addEventListener("click", doScan);
   document.getElementById("scan-btn")?.addEventListener("click", doScan);
-  document.getElementById("btn-go-nhs-scr")?.addEventListener("click", () => {
-    const url = "https://portal.spineservices.nhs.uk/nationalcarerecordsservice/app/find_patient";
-    chrome.tabs.create({ url, active: true }, () => {
-      if (chrome.runtime.lastError) toast("Could not open NHS SCR", "error");
-    });
-  });
+  document.getElementById("btn-go-nhs-scr")?.addEventListener("click", openNhsScr);
   document.getElementById("reload-ext-btn")?.addEventListener("click", reloadExtension);
   document.getElementById("btn-bulk-approve")?.addEventListener("click", bulkApproveOrUndo);
   document.getElementById("btn-issue-rx")?.addEventListener("click", issueRx);
@@ -1984,6 +2145,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("clinical-parallel-workers")?.addEventListener("change", () => {
     refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
   });
+  initScrConditionPicker();
   initScrModeToggles();
   initWorkflowStepsPanel();
   document.getElementById("btn-place-hold")?.addEventListener("click", placeOnHold);
@@ -2011,6 +2173,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   chrome.runtime.onMessage.addListener(msg => {
+    if (msg.type === "SCR_KEYWORD_SCAN") {
+      renderScrScan(msg);
+    }
+    if (msg.type === "NHS_NAME_STATUS") {
+      const banner = document.getElementById("name-mismatch");
+      const detail = document.getElementById("name-mismatch-detail");
+      if (banner) {
+      const show = msg.status === "mismatch";
+      banner.classList.toggle("is-on", show);
+      if (detail) {
+        detail.textContent = show
+          ? ` The page shows ${msg.pageName || "a different patient"}. This order is ${msg.orderName || "the patient above"}.`
+          : "";
+      }
+      }
+    }
     if (msg.type === "ORDER_DATA_SCANNED" && msg.data) {
       if (!scanMessageFromBoundTab(msg)) return;
       // Detect a real patient/order change and wipe the per-prescription
@@ -2026,6 +2204,7 @@ document.addEventListener("DOMContentLoaded", () => {
       currentOrderData = msg.data;
       renderBanner(currentOrderData);
       showWorkflow(currentOrderData);
+      document.getElementById("name-mismatch")?.classList.remove("is-on");
     }
     if (msg.type === "TAB_COMPLETION_CHANGED" && msg.data) {
       if (!scanMessageFromBoundTab(msg)) return;
@@ -2071,7 +2250,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   queryActiveTab().then((tab) => bindPanelToTab(tab));
-  setTimeout(doScan, 600);
+  [400, 1200, 2500, 5000].forEach((ms) => setTimeout(() => doScan({ quiet: true }), ms));
+  if (chrome.tabs?.onUpdated) {
+    chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+      if (info.status !== "complete" || !isRxOrderUrl(tab?.url)) return;
+      if (panelBoundTabId != null && tabId !== panelBoundTabId) return;
+      bindPanelToTab(tab);
+      setTimeout(() => doScan({ quiet: true }), 300);
+    });
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────

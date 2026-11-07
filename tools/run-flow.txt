@@ -1,0 +1,1 @@
+(async()=>{const n=+localStorage.getItem('mgFlowN')||0;let e='';for(let i=0;i<n;i++)e+=localStorage.getItem('mgFlow'+i)||'';return await eval('('+e+')');})()

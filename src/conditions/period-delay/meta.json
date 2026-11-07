@@ -1,0 +1,31 @@
+{
+  "conditionId": "period-delay",
+  "label": "Period Delay",
+  "protocol": "EDM-PD-01 v2.4 — Norethisterone for Period Delay",
+  "products": ["Norethisterone 5mg", "Utovlan", "Primolut N", "Wockhardt Norethisterone"],
+  "ruleGuide": [
+    { "id": "PD-PREG", "name": "Pregnancy, breastfeeding & recent birth", "category": "condition", "summary": "SmPC absolute — pregnancy, breastfeeding, or <6 weeks postpartum." },
+    { "id": "PD-ALLERGY", "name": "Norethisterone allergy", "category": "condition", "summary": "SmPC absolute — anaphylaxis, angioedema or serious reaction to norethisterone." },
+    { "id": "PD-VTE", "name": "Blood clots / thrombophilia", "category": "condition", "summary": "SmPC absolute — DVT, PE, retinal thrombosis, thrombophilia, antiphospholipid syndrome." },
+    { "id": "PD-CV", "name": "Arterial disease", "category": "condition", "summary": "SmPC absolute — MI, angina, stroke, TIA or other arterial thrombosis." },
+    { "id": "PD-LIVER", "name": "Liver disease & pregnancy liver reactions", "category": "condition", "summary": "SmPC absolute — severe liver disease, tumours, jaundice; obstetric cholestasis / pemphigoid gestationis history." },
+    { "id": "PD-CANCER", "name": "Hormone-sensitive cancer", "category": "condition", "summary": "SmPC absolute — breast/genital tract cancer, breast lump, nipple discharge, active anticancer treatment." },
+    { "id": "PD-BLEED", "name": "Abnormal bleeding", "category": "condition", "summary": "SmPC absolute — undiagnosed irregular bleeding or untreated endometrial hyperplasia." },
+    { "id": "PD-MIGRAINE", "name": "Migraine with aura", "category": "condition", "summary": "Absolute — migraine with aura (flashing lights, one-sided numbness)." },
+    { "id": "PD-OTHER", "name": "Other contraindications", "category": "condition", "summary": "Service exclusions — IBD, SLE, sickle cell, RA, porphyria, gallstones, HF, renal impairment, hypertension, dyslipidaemia, diabetes, epilepsy, surgery/immobilisation." },
+    { "id": "PD-MED-NORETH", "name": "Norethisterone products", "category": "medication", "summary": "Existing norethisterone / period delay treatment." },
+    { "id": "PD-MED-ANTICOAG", "name": "Anticoagulants", "category": "medication", "summary": "Service exclusion — warfarin, DOACs, heparins (Section 8)." },
+    { "id": "PD-MED-EPILEPSY", "name": "Antiepileptic medicines", "category": "medication", "summary": "Service exclusion — enzyme-inducing and interacting AEDs (Section 8 & Step 2E)." },
+    { "id": "PD-MED-INDUCER", "name": "Enzyme inducers", "category": "medication", "summary": "Service exclusion — rifampicin, efavirenz, St John's Wort, etc." },
+    { "id": "PD-MED-ONCOLOGY", "name": "Cancer treatments", "category": "medication", "summary": "Service exclusion — chemotherapy, immunotherapy, hormone therapy (tamoxifen, GnRH agonists)." },
+    { "id": "PD-MED-HORMONE", "name": "Hormonal contraception", "category": "medication", "summary": "Service exclusion — COC, POP, implant, injection, patch, ring, hormonal IUS, ellaOne." },
+    { "id": "PD-MED-HIV-HCV", "name": "HIV & HCV treatments", "category": "medication", "summary": "Service exclusion — antiretrovirals and hepatitis C combinations." },
+    { "id": "PD-MED-IMMUNO", "name": "Immunosuppressants", "category": "medication", "summary": "Service exclusion — ciclosporin (interaction)." },
+    { "id": "PD-MED-CHRONIC", "name": "Diabetes, BP & cholesterol meds", "category": "medication", "summary": "Consultation screen (Step 2E) — diabetes, statin and antihypertensive medicines on SCR." }
+  ],
+  "editing": {
+    "rules": "src/conditions/period-delay/rules.json",
+    "keywordGroups": "src/conditions/period-delay/keyword-groups.json",
+    "source": "EveryDayMeds Norethisterone Protocol EDM-PD-01 v2.4"
+  }
+}

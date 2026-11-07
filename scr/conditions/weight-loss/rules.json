@@ -1,0 +1,2968 @@
+[
+  {
+    "id": "WL-PANCREATITIS",
+    "name": "Pancreatitis or pancreatic insufficiency",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Pancreatitis",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "pancreatitis",
+      "acute pancreatitis",
+      "chronic pancreatitis",
+      "pancreatic insufficiency",
+      "exocrine pancreatic insufficiency",
+      "Creon",
+      "pancreatin",
+      "Pancrex",
+      "Nutrizym"
+    ],
+    "stem_keywords": [
+      "pancreatit"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Any diagnosis at any time is an exclusion.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-EATING-DISORDER",
+    "name": "Eating disorder (diagnosed)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A / §12.1 — Eating disorders",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "anorexia nervosa",
+      "atypical anorexia",
+      "bulimia",
+      "bulimia nervosa",
+      "binge eating disorder",
+      "ARFID",
+      "avoidant restrictive food intake disorder",
+      "avoidant/restrictive food intake disorder",
+      "eating disorder",
+      "EDNOS",
+      "OSFED"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products, add a critical note and signpost (GP, local eating-disorder service, Beat).",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-EATING-POSSIBLE",
+    "name": "Possible disordered eating (not a diagnosis)",
+    "category": "condition",
+    "protocol_ref": "§12.1 / §12.5 — Disordered eating; knowledge base: binge eating without diagnosis",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "anorexia",
+      "binge eating",
+      "disordered eating",
+      "purging",
+      "laxative misuse",
+      "laxative abuse",
+      "food restriction"
+    ],
+    "exclude_phrases": [
+      "anorexia nervosa",
+      "atypical anorexia",
+      "binge eating disorder"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — check: “anorexia” may mean loss of appetite (§12.1)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — check: “anorexia” may mean loss of appetite (§12.1)"
+    },
+    "rationale": "Review. Free-text “anorexia” meaning loss of appetite is not an eating disorder. Reported binge eating without a formal diagnosis may be prescribed.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-T1DM",
+    "name": "Type 1 diabetes / LADA",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Type 1 diabetes",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "type 1 diabetes",
+      "type 1 diabetes mellitus",
+      "type I diabetes",
+      "T1DM",
+      "IDDM",
+      "insulin dependent diabetes",
+      "insulin-dependent diabetes",
+      "LADA",
+      "latent autoimmune diabetes"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. GLP-1s are not licensed for T1DM; risk of diabetic ketoacidosis.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-DKA",
+    "name": "Diabetic ketoacidosis history",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A rationale (T1DM) — review",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "diabetic ketoacidosis",
+      "DKA",
+      "ketoacidosis",
+      "euglycaemic ketoacidosis"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review. DKA usually means type 1 diabetes (→ reject). In type 2 diabetes it is often SGLT2-related — and SGLT2 inhibitors are themselves excluded.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-HYPOGLYCAEMIA",
+    "name": "Hypoglycaemia",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Hypoglycaemia (REJECT)",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "hypoglycaemia",
+      "hypoglycemia",
+      "hypoglycaemic episode",
+      "hypoglycaemic episodes",
+      "recurrent hypoglycaemia",
+      "hypoglycaemic attack"
+    ],
+    "exclude_phrases": [
+      "oral hypoglycaemic",
+      "hypoglycaemic agent",
+      "hypoglycaemic agents",
+      "hypoglycaemic drug",
+      "hypoglycaemic medication"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. The service cannot monitor these patients.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-LIVER-SEVERE",
+    "name": "Severe liver disease",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Severe liver conditions",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "cirrhosis",
+      "liver cirrhosis",
+      "liver transplant",
+      "severe hepatic impairment",
+      "end stage liver disease",
+      "end-stage liver disease",
+      "end stage liver failure",
+      "liver failure",
+      "hepatic failure",
+      "decompensated liver",
+      "hepatic encephalopathy",
+      "oesophageal varices",
+      "primary biliary cholangitis",
+      "primary biliary cirrhosis",
+      "PBC"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Any diagnosis at any time is an exclusion.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-ENDO-SECONDARY",
+    "name": "Endocrine cause of obesity",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Endocrine disorders",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "acromegaly",
+      "growth hormone disorder",
+      "Cushing",
+      "Cushings",
+      "Cushing syndrome",
+      "Addison",
+      "Addisons",
+      "adrenal insufficiency",
+      "congenital adrenal hyperplasia",
+      "CAH"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Secondary obesity caused by endocrine disease needs specialist correction.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-GI-ABSOLUTE",
+    "name": "IBD, gastroparesis or stoma",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — GI conditions",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "ulcerative colitis",
+      "Crohn",
+      "Crohns",
+      "Crohn disease",
+      "inflammatory bowel disease",
+      "IBD",
+      "gastroparesis",
+      "delayed gastric emptying",
+      "ileostomy",
+      "colostomy",
+      "stoma"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Any diagnosis at any time is an exclusion.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-IBD",
+    "name": "IBD medicine (mesalazine etc.)",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat A — GI conditions (medicine as signal)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "mesalazine",
+      "Asacol",
+      "Octasa",
+      "Pentasa",
+      "Salofalk",
+      "Mezavant",
+      "balsalazide",
+      "olsalazine"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review. Aminosalicylates are almost always prescribed for ulcerative colitis or Crohn’s — if so, reject.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-MALABSORPTION",
+    "name": "Chronic malabsorption",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Chronic malabsorption (also listed under Cat A GI conditions)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "chronic malabsorption",
+      "malabsorption syndrome",
+      "short bowel syndrome",
+      "intestinal failure"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — email patient (Macro 8)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — email patient (Macro 8)"
+    },
+    "rationale": "Hold and email (Macro 8). Reject if a formal chronic malabsorption syndrome is confirmed.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-MTC-MEN2",
+    "name": "Medullary thyroid cancer or MEN2 (personal or family)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Thyroid disorders & cancer",
+    "action": "REJECT_SERVICE",
+    "family_history_counts": true,
+    "keywords": [
+      "medullary thyroid cancer",
+      "medullary thyroid carcinoma",
+      "medullary carcinoma of thyroid",
+      "MTC",
+      "MEN2",
+      "MEN 2",
+      "MEN2A",
+      "MEN2B",
+      "MEN 2A",
+      "MEN 2B",
+      "multiple endocrine neoplasia type 2",
+      "C-cell hyperplasia",
+      "raised calcitonin",
+      "elevated calcitonin"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products immediately — including family history.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-LONG-QT",
+    "name": "Long QT syndrome",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Long QT (REJECT)",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "long QT",
+      "long QT syndrome",
+      "LQTS",
+      "prolonged QT",
+      "QT prolongation",
+      "QTc prolongation"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Effects of GLP-1 on this condition are not known and cannot be monitored.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-PKD",
+    "name": "Polycystic kidney disease",
+    "category": "condition",
+    "protocol_ref": "EDM SCR SOP §11.1 Cat A; §9.8 knowledge base (kidney cysts “if not PKD”)",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "polycystic kidney disease",
+      "polycystic kidneys",
+      "ADPKD",
+      "PKD"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-SICKLE-CELL",
+    "name": "Sickle cell disease",
+    "category": "condition",
+    "protocol_ref": "EDM SCR SOP §11.1 Cat A (EDM-WM-CI-01)",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "sickle cell disease",
+      "sickle cell anaemia",
+      "sickle cell anemia",
+      "sickle cell"
+    ],
+    "exclude_phrases": [
+      "sickle cell trait",
+      "sickle trait"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products (SCR SOP Cat A). Sickle cell trait is not sickle cell disease.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-NAION",
+    "name": "NAION (ischaemic optic neuropathy)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — NAION; §7.10",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "NAION",
+      "non-arteritic anterior ischaemic optic neuropathy",
+      "non arteritic anterior ischaemic optic neuropathy",
+      "non arteritic ischaemic optic neuropathy",
+      "non-arteritic ischaemic optic neuropathy",
+      "anterior ischaemic optic neuropathy",
+      "ischaemic optic neuropathy",
+      "ischemic optic neuropathy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Any diagnosis at any time is an exclusion.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-HF-SEVERE",
+    "name": "Heart failure NYHA IV",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Stage 4 heart failure",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "NYHA IV",
+      "NYHA class IV",
+      "NYHA 4",
+      "NYHA class 4",
+      "NYHA stage 4",
+      "stage 4 heart failure",
+      "heart failure stage 4",
+      "end-stage heart failure",
+      "end stage heart failure",
+      "advanced heart failure"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. Heart failure symptomatic at rest.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-CKD-SEVERE",
+    "name": "Severe CKD (stage 4–5, dialysis)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A — Severe kidney disease (eGFR <30)",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "CKD stage 4",
+      "CKD stage 5",
+      "CKD 4",
+      "CKD 5",
+      "CKD G4",
+      "CKD G5",
+      "stage 4 CKD",
+      "stage 5 CKD",
+      "chronic kidney disease stage 4",
+      "chronic kidney disease stage 5",
+      "chronic kidney disease, stage 4",
+      "chronic kidney disease, stage 5",
+      "end stage renal disease",
+      "end-stage renal disease",
+      "ESRD",
+      "end stage kidney disease",
+      "established renal failure",
+      "dialysis",
+      "haemodialysis",
+      "peritoneal dialysis"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products. eGFR below 30 ml/min.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-OBS-EGFR",
+    "name": "eGFR result",
+    "category": "observation",
+    "protocol_ref": "§9.8 Cat A — eGFR <30",
+    "action": "REJECT_SERVICE",
+    "match_type": "regex",
+    "patterns": [
+      "\\beGFR\\b\\s*(?:result|level|value)?\\s*(?:is|was|of)?\\s*[:=]?\\s*[<>]?\\s*(\\d{1,3})"
+    ],
+    "keywords": [],
+    "structured": true,
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "eGFR below 30 rejects all products. 30 or above is not flagged.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-INSULIN",
+    "name": "Insulin",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat A/B — Insulin (§7.11: outside this service)",
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "reject_if_repeat": true,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "insulin",
+      "NovoRapid",
+      "Humalog",
+      "Actrapid",
+      "Humulin",
+      "Insulatard",
+      "Lantus",
+      "Abasaglar",
+      "Semglee",
+      "Levemir",
+      "Tresiba",
+      "NovoMix",
+      "insulin aspart",
+      "insulin lispro",
+      "isophane",
+      "insulin glargine",
+      "insulin detemir",
+      "insulin degludec",
+      "Toujeo",
+      "Fiasp",
+      "Lyumjev",
+      "Apidra",
+      "Admelog"
+    ],
+    "exclude_phrases": [
+      "insulin resistance",
+      "insulin resistant",
+      "insulin sensitivity",
+      "insulin-like growth factor",
+      "insulin like growth factor",
+      "insulinoma"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+      "COUNSEL": "OLDER THAN 3 MONTHS — confirm stopped and not on repeat, then may prescribe",
+      "FLAG_PRESCRIBER": "HOLD — cannot tell if current: confirm repeat status / last issue (Macro 1)"
+    },
+    "rationale": "Reject if on repeat or issued in the last 3 months. Insulin-treated patients are outside this service (hypoglycaemia risk).",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-DIABETES-ORAL",
+    "name": "Oral diabetes medicine (excluding metformin)",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat A/B — Oral diabetic medications",
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "reject_if_repeat": true,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "gliclazide",
+      "Diamicron",
+      "glibenclamide",
+      "Daonil",
+      "glimepiride",
+      "Amaryl",
+      "glipizide",
+      "Minodiab",
+      "tolbutamide",
+      "Rastin",
+      "sitagliptin",
+      "Januvia",
+      "vildagliptin",
+      "Galvus",
+      "linagliptin",
+      "Trajenta",
+      "saxagliptin",
+      "Onglyza",
+      "alogliptin",
+      "Vipidia",
+      "Janumet",
+      "Eucreas",
+      "Jentadueto",
+      "Komboglyze",
+      "Vipdomet",
+      "Incresync",
+      "pioglitazone",
+      "Actos",
+      "Competact",
+      "empagliflozin",
+      "Jardiance",
+      "dapagliflozin",
+      "Forxiga",
+      "canagliflozin",
+      "Invokana",
+      "ertugliflozin",
+      "Steglatro",
+      "Synjardy",
+      "Xigduo",
+      "Vokanamet",
+      "Glyxambi",
+      "Qtern",
+      "Steglujan",
+      "Segluromet",
+      "sotagliflozin",
+      "repaglinide",
+      "Prandin",
+      "nateglinide",
+      "Starlix",
+      "acarbose",
+      "Glucobay"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+      "COUNSEL": "OLDER THAN 3 MONTHS — confirm stopped and not on repeat, then may prescribe",
+      "FLAG_PRESCRIBER": "HOLD — cannot tell if current: confirm repeat status / last issue (Macro 1)"
+    },
+    "rationale": "Reject if on repeat or issued in the last 3 months. Metformin alone is not excluded.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-NTI",
+    "name": "Narrow-therapeutic-index medicine",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat A/B — Excluded NTI medications",
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "reject_if_repeat": true,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "amiodarone",
+      "carbamazepine",
+      "Tegretol",
+      "Carbagen",
+      "Curatil",
+      "ciclosporin",
+      "cyclosporine",
+      "Neoral",
+      "Capimune",
+      "Capsorin",
+      "Deximune",
+      "Vanquoral",
+      "clozapine",
+      "Clozaril",
+      "Denzapine",
+      "Zaponex",
+      "digoxin",
+      "fenfluramine",
+      "Fintepla",
+      "lithium",
+      "Priadel",
+      "Camcolit",
+      "Liskonum",
+      "Li-Liquid",
+      "mycophenolate",
+      "mycophenolate mofetil",
+      "CellCept",
+      "Myfenax",
+      "Myfortic",
+      "methotrexate",
+      "phenobarbital",
+      "phenobarbitone",
+      "phenytoin",
+      "Epanutin",
+      "Dilantin",
+      "somatrogon",
+      "Ngenla",
+      "tacrolimus",
+      "Prograf",
+      "Advagraf",
+      "Envarsus",
+      "Adoport",
+      "Dailiport",
+      "Modigraf",
+      "theophylline",
+      "Uniphyllin",
+      "Slo-Phyllin",
+      "Nuelin",
+      "aminophylline",
+      "Phyllocontin",
+      "warfarin",
+      "acenocoumarol",
+      "Sinthrome",
+      "phenindione"
+    ],
+    "exclude_phrases": [
+      "tacrolimus ointment",
+      "methotrexate injection",
+      "methotrexate pre-filled",
+      "methotrexate prefilled",
+      "lithium carbonate level normal"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+      "COUNSEL": "OLDER THAN 3 MONTHS — confirm stopped and not on repeat, then may prescribe",
+      "FLAG_PRESCRIBER": "HOLD — cannot tell if current: confirm repeat status / last issue (Macro 1)"
+    },
+    "rationale": "Reject if on repeat or issued in the last 3 months.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-ORLISTAT",
+    "name": "Orlistat",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat B — Orlistat",
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "reject_if_repeat": true,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "orlistat",
+      "Xenical",
+      "Alli",
+      "Orlos"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+      "COUNSEL": "OLDER THAN 3 MONTHS — confirm stopped and not on repeat, then may prescribe",
+      "FLAG_PRESCRIBER": "HOLD — cannot tell if current: confirm repeat status / last issue (Macro 1)"
+    },
+    "rationale": "Reject if on repeat or issued in the last 3 months. Orlistat must be stopped before starting a GLP-1.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-MYSIMBA",
+    "name": "Mysimba (naltrexone/bupropion)",
+    "category": "medication",
+    "protocol_ref": "Service extension — not named in EDM-WL-01 (mirrors the orlistat rule)",
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "reject_if_repeat": true,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "Mysimba",
+      "naltrexone/bupropion",
+      "naltrexone with bupropion",
+      "bupropion/naltrexone"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — on repeat, or acute issue within 3 months (§9.8 Cat B)",
+      "COUNSEL": "OLDER THAN 3 MONTHS — confirm stopped and not on repeat, then may prescribe",
+      "FLAG_PRESCRIBER": "HOLD — cannot tell if current: confirm repeat status / last issue (Macro 1)"
+    },
+    "rationale": "Treated like orlistat: reject if current or issued in the last 3 months (no concurrent weight-management medicines, NICE).",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-GLP1-EXISTING",
+    "name": "GLP-1 already on record",
+    "category": "medication",
+    "protocol_ref": "§6.5 / §9.8 — Active NHS GLP-1 before transfer or step-up",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "Mounjaro",
+      "tirzepatide",
+      "Wegovy",
+      "semaglutide",
+      "Ozempic",
+      "Rybelsus",
+      "Saxenda",
+      "Victoza",
+      "liraglutide",
+      "Nevolat",
+      "Trulicity",
+      "dulaglutide",
+      "Byetta",
+      "Bydureon",
+      "exenatide",
+      "Lyxumia",
+      "lixisenatide",
+      "Xultophy",
+      "Suliqua",
+      "Foundayo",
+      "orforglipron",
+      "GLP-1",
+      "GLP1"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "CHECK — possible active NHS GLP-1: do not supply concurrently (§6.5)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "CHECK — possible active NHS GLP-1: do not supply concurrently (§6.5)",
+      "COUNSEL": "OLDER THAN 3 MONTHS — previous use; apply PUE / restart rules (§6.5, §9.7)"
+    },
+    "rationale": "Not an automatic reject. Check for active NHS GLP-1 prescribing before approving a transfer or step-up; never supply two GLP-1s at once.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-BARIATRIC",
+    "name": "Bariatric surgery",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat B — Bariatric surgery (<12 months)",
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "bariatric",
+      "bariatric surgery",
+      "gastric bypass",
+      "Roux-en-Y",
+      "RYGB",
+      "sleeve gastrectomy",
+      "gastric sleeve",
+      "gastric band",
+      "gastric banding",
+      "Lap-Band",
+      "mini gastric bypass",
+      "one anastomosis gastric bypass",
+      "OAGB",
+      "biliopancreatic diversion",
+      "duodenal switch",
+      "gastric balloon",
+      "intragastric balloon",
+      "endoscopic sleeve gastroplasty"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — within 12 months of surgery (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — within 12 months of surgery (§9.8 Cat B)",
+      "COUNSEL": "12 MONTHS OR MORE — may prescribe; record the date",
+      "FLAG_PRESCRIBER": "HOLD — date unknown: email patient (Macro 1)"
+    },
+    "rationale": "Reject if surgery was less than 12 months ago; prescribe if 12 months or more. Date unknown: hold and email (Macro 1).",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-CHOLECYSTECTOMY",
+    "name": "Cholecystectomy",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat B — Gallbladder removal (<12 months)",
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action": "REJECT_SERVICE",
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "cholecystectomy",
+      "laparoscopic cholecystectomy",
+      "lap chole",
+      "gallbladder removal",
+      "gallbladder removed",
+      "gall bladder removed",
+      "post-cholecystectomy",
+      "post cholecystectomy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — within 12 months of surgery (§9.8 Cat B)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — within 12 months of surgery (§9.8 Cat B)",
+      "COUNSEL": "12 MONTHS OR MORE — may prescribe; record the date",
+      "FLAG_PRESCRIBER": "HOLD — date unknown: email patient (Macro 1)"
+    },
+    "rationale": "Reject if less than 12 months ago; prescribe if 12 months or more.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-GALLSTONES",
+    "name": "Gallstones / cholecystitis",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat C — Gallstones / cholecystitis",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "gallstone",
+      "gallstones",
+      "gall stones",
+      "cholelithiasis",
+      "cholecystitis",
+      "biliary colic",
+      "choledocholithiasis",
+      "gallbladder sludge",
+      "biliary sludge",
+      "ursodeoxycholic acid",
+      "Destolit",
+      "Ursofalk"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — has the gallbladder been removed? (Macro 2)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — has the gallbladder been removed? (Macro 2)"
+    },
+    "rationale": "Hold and email (Macro 2). Gallbladder still in situ → reject. Removed → apply the cholecystectomy 12-month rule.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-HF",
+    "name": "Heart failure (stage not stated)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat C — Heart failure, stage unknown",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "heart failure",
+      "cardiac failure",
+      "congestive cardiac failure",
+      "congestive heart failure",
+      "CCF",
+      "LVSD",
+      "left ventricular systolic dysfunction",
+      "HFrEF",
+      "HFpEF",
+      "reduced ejection fraction",
+      "NYHA"
+    ],
+    "exclude_phrases": [
+      "NYHA IV",
+      "NYHA class IV",
+      "NYHA 4",
+      "NYHA class 4",
+      "NYHA stage 4"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — confirm NYHA stage (Macro 4)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — confirm NYHA stage (Macro 4)"
+    },
+    "rationale": "Hold and email (Macro 4): request the latest cardiology letter. Stage IV → reject; stage I–III → prescribe.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-CKD",
+    "name": "Chronic kidney disease (eGFR not stated)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat C — CKD, eGFR unknown",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "chronic kidney disease",
+      "CKD",
+      "renal impairment",
+      "chronic renal failure",
+      "kidney disease",
+      "CKD stage 3",
+      "CKD 3a",
+      "CKD 3b"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — request latest eGFR (Macro 5)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — request latest eGFR (Macro 5)"
+    },
+    "rationale": "Hold and email (Macro 5) unless an eGFR is on the SCR. eGFR <30 → reject; ≥30 (stage 1–3) → prescribe.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-RETINOPATHY-ACTIVE",
+    "name": "Maculopathy / active diabetic eye disease",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A / knowledge base — Maculopathy; active diabetic retinopathy",
+    "action": "REJECT_SERVICE",
+    "keywords": [
+      "maculopathy",
+      "diabetic maculopathy",
+      "diabetic macular oedema",
+      "diabetic macular edema",
+      "proliferative diabetic retinopathy",
+      "proliferative retinopathy",
+      "active diabetic retinopathy"
+    ],
+    "exclude_phrases": [
+      "non-proliferative diabetic retinopathy",
+      "non proliferative diabetic retinopathy",
+      "pre-proliferative diabetic retinopathy",
+      "non-proliferative retinopathy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products (SCR: Macro 12 repeat / 13 new)"
+    },
+    "rationale": "Reject all products.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-RETINOPATHY",
+    "name": "Retinopathy or macular condition (type to confirm)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat C — Retinopathy: type matters",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "diabetic retinopathy",
+      "background retinopathy",
+      "background diabetic retinopathy",
+      "non-proliferative diabetic retinopathy",
+      "pre-proliferative diabetic retinopathy",
+      "retinopathy",
+      "macular degeneration",
+      "age-related macular degeneration",
+      "AMD",
+      "macular oedema",
+      "aflibercept",
+      "Eylea",
+      "ranibizumab",
+      "Lucentis",
+      "faricimab",
+      "Vabysmo",
+      "retinal laser"
+    ],
+    "exclude_phrases": [
+      "hypertensive retinopathy",
+      "retinopathy of prematurity",
+      "toxoplasma chorioretinitis",
+      "maculopathy",
+      "diabetic maculopathy",
+      "proliferative diabetic retinopathy",
+      "active diabetic retinopathy",
+      "diabetic macular oedema"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — confirm type and eye-clinic status (Macro 19)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — confirm type and eye-clinic status (Macro 19)"
+    },
+    "rationale": "Hold (Macro 19). Active diabetic retinopathy under eye clinic → reject. Background/stable diabetic retinopathy → escalate with the last screening result. Non-diabetic retinopathy → prescribe.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-CANCER",
+    "name": "Cancer diagnosis or treatment",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Cancer (active treatment: Cat A)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "FLAG_PRESCRIBER",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "cancer",
+      "carcinoma",
+      "malignant",
+      "malignancy",
+      "lymphoma",
+      "leukaemia",
+      "leukemia",
+      "myeloma",
+      "sarcoma",
+      "melanoma",
+      "metastatic",
+      "metastases",
+      "neoplasm",
+      "tumour",
+      "tumor",
+      "oncology",
+      "chemotherapy",
+      "radiotherapy",
+      "immunotherapy",
+      "tamoxifen",
+      "anastrozole",
+      "letrozole",
+      "exemestane",
+      "Zoladex",
+      "goserelin"
+    ],
+    "stem_keywords": [
+      "carcinom",
+      "malignan",
+      "metastat"
+    ],
+    "exclude_phrases": [
+      "basal cell carcinoma",
+      "BCC",
+      "cancer screening",
+      "bowel cancer screening",
+      "breast screening",
+      "cervical screening",
+      "screening for cancer",
+      "intraepithelial neoplasia",
+      "benign neoplasm",
+      "benign tumour",
+      "medullary thyroid cancer",
+      "medullary thyroid carcinoma"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — confirm cancer status (Macro 3; breast cancer Macro 16)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — confirm cancer status (Macro 3; breast cancer Macro 16)"
+    },
+    "rationale": "Hold and email (Macro 3). Reject if under active oncology treatment. Remission and discharged → may prescribe.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-PREGNANCY",
+    "name": "Pregnancy",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Pregnancy, breastfeeding & conception",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "pregnant",
+      "pregnancy",
+      "antenatal",
+      "gestation",
+      "trimester",
+      "expecting a baby",
+      "EDD"
+    ],
+    "stem_keywords": [
+      "pregnan"
+    ],
+    "exclude_phrases": [
+      "pregnancy test negative",
+      "negative pregnancy test",
+      "not pregnant"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — confirm not pregnant (Macro 6)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — confirm not pregnant (Macro 6)",
+      "COUNSEL": "PAST PREGNANCY — confirm not breastfeeding; advise contraception"
+    },
+    "rationale": "Recorded in the last 12 months or undated: hold and email (Macro 6). Currently pregnant → reject.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-BREASTFEEDING",
+    "name": "Breastfeeding",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Pregnancy, breastfeeding & conception",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "breastfeeding",
+      "breast feeding",
+      "breast-feeding",
+      "breastfed",
+      "lactating",
+      "lactation",
+      "expressing breast milk"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — confirm not breastfeeding (Macro 6)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — confirm not breastfeeding (Macro 6)",
+      "COUNSEL": "OLDER ENTRY — confirm no longer breastfeeding"
+    },
+    "rationale": "Hold and email (Macro 6). Currently breastfeeding → reject.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-CONCEPTION",
+    "name": "Planning pregnancy / fertility treatment",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Conception (planning within 3 months)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "trying to conceive",
+      "TTC",
+      "planning pregnancy",
+      "planning a pregnancy",
+      "preconception",
+      "fertility treatment",
+      "fertility clinic",
+      "fertility referral",
+      "IVF",
+      "ICSI",
+      "IUI",
+      "clomifene",
+      "clomiphene"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — planning pregnancy within 3 months? (Macro 6)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — planning pregnancy within 3 months? (Macro 6)",
+      "COUNSEL": "OLDER ENTRY — confirm current plans; advise contraception"
+    },
+    "rationale": "Hold and email (Macro 6). Planning pregnancy within 3 months → reject.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-DEMENTIA",
+    "name": "Dementia / cognitive impairment",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Dementia / cognitive impairment",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "dementia",
+      "Alzheimer",
+      "Alzheimers",
+      "cognitive impairment",
+      "mild cognitive impairment",
+      "memory clinic",
+      "donepezil",
+      "memantine",
+      "rivastigmine",
+      "galantamine"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — assess support and self-administration (Macro 7)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — assess support and self-administration (Macro 7)"
+    },
+    "rationale": "Hold and assess (Macro 7). Reject if unable to self-administer safely or lacking support.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-SUICIDE-SELFHARM",
+    "name": "Suicidal thoughts, self-harm or overdose",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Suicidal ideation (reject within 12 months); §12.2",
+    "action": "REJECT_SERVICE",
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "FLAG_PRESCRIBER",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "suicidal ideation",
+      "suicidal thoughts",
+      "suicide attempt",
+      "attempted suicide",
+      "suicide risk",
+      "self-harm",
+      "self harm",
+      "deliberate self harm",
+      "DSH",
+      "overdose",
+      "intentional overdose",
+      "self-poisoning",
+      "self poisoning"
+    ],
+    "stem_keywords": [
+      "suicid"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — within 12 months; crisis signposting (Macro 9, §12.2)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — within 12 months; crisis signposting (Macro 9, §12.2)",
+      "FLAG_PRESCRIBER": "HOLD — check current mental state (Macro 9); escalate"
+    },
+    "rationale": "Within 12 months: reject, contact the patient and signpost (GP, crisis services, Samaritans 116 123). Older or undated: hold, Macro 9, escalate to the Clinical Lead.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-MENTAL-HEALTH",
+    "name": "Depression, anxiety or other mental illness",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Depression, anxiety & mental health; §12.3",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "action_if_outside_window": "FLAG_PRESCRIBER",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "depression",
+      "depressive episode",
+      "depressive disorder",
+      "low mood",
+      "anxiety",
+      "generalised anxiety disorder",
+      "mixed anxiety and depression",
+      "panic disorder",
+      "bipolar",
+      "bipolar disorder",
+      "mania",
+      "psychosis",
+      "psychotic episode",
+      "schizophrenia",
+      "schizoaffective",
+      "PTSD",
+      "post-traumatic stress",
+      "mental health crisis",
+      "crisis team",
+      "psychiatric admission",
+      "CMHT"
+    ],
+    "stem_keywords": [
+      "depress"
+    ],
+    "exclude_phrases": [
+      "respiratory depression"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD — assess stability and recent changes (Macro 9)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD — assess stability and recent changes (Macro 9)"
+    },
+    "rationale": "Hold and assess (Macro 9). Reject if acutely unwell within the last 3 months or a new antidepressant was started recently. Stable, treated depression or anxiety → prescribe.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-MED-ANTIDEPRESSANT",
+    "name": "Antidepressant / antipsychotic",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat D — “Started a new antidepressant recently”",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 3,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "sertraline",
+      "fluoxetine",
+      "citalopram",
+      "escitalopram",
+      "paroxetine",
+      "fluvoxamine",
+      "venlafaxine",
+      "duloxetine",
+      "mirtazapine",
+      "vortioxetine",
+      "trazodone",
+      "agomelatine",
+      "bupropion",
+      "amitriptyline",
+      "nortriptyline",
+      "clomipramine",
+      "imipramine",
+      "phenelzine",
+      "moclobemide",
+      "quetiapine",
+      "olanzapine",
+      "risperidone",
+      "aripiprazole",
+      "lurasidone",
+      "haloperidol",
+      "lamotrigine",
+      "antidepressant"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "CHECK — started or changed in the last 3 months? (Macro 9)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "CHECK — started or changed in the last 3 months? (Macro 9)",
+      "COUNSEL": "STABLE MORE THAN 3 MONTHS — not an exclusion"
+    },
+    "rationale": "Issued in the last 3 months or undated: check whether it is new or a dose change. A recent new antidepressant → reject. Stable for more than 3 months → not an exclusion.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-ALCOHOL",
+    "name": "Alcohol misuse or dependence",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat D — Alcohol abuse or dependence; §12.6",
+    "action": "REJECT_SERVICE",
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "FLAG_PRESCRIBER",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "alcohol dependence",
+      "alcohol dependency",
+      "alcohol abuse",
+      "alcohol misuse",
+      "alcoholism",
+      "alcoholic",
+      "alcohol use disorder",
+      "harmful drinking",
+      "dependent drinking",
+      "alcohol detox",
+      "alcohol detoxification",
+      "alcohol withdrawal",
+      "disulfiram",
+      "Antabuse",
+      "acamprosate",
+      "Campral",
+      "nalmefene",
+      "Selincro"
+    ],
+    "exclude_phrases": [
+      "non-alcoholic",
+      "non alcoholic",
+      "alcoholic liver disease"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — alcohol misuse within 12 months (§12.6)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — alcohol misuse within 12 months (§12.6)",
+      "FLAG_PRESCRIBER": "HOLD — assess current drinking (Macro 10, CAGE)"
+    },
+    "rationale": "Within 12 months, current, or in treatment: reject. Older or undated: hold and assess (Macro 10, CAGE questions).",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-WEGTAB-THYROID",
+    "name": "Hypothyroidism / thyroid hormone (Wegovy tablets only)",
+    "category": "medication",
+    "protocol_ref": "§9.8 Cat A (Wegovy pill only) / §7.10",
+    "action": "REJECT_WEGOVY_TABLETS",
+    "products": [
+      "wegovy_tab"
+    ],
+    "keywords": [
+      "levothyroxine",
+      "liothyronine",
+      "Eltroxin",
+      "Evotrox",
+      "Cytomel",
+      "thyroxine",
+      "hypothyroidism",
+      "hypothyroid",
+      "underactive thyroid",
+      "Hashimoto",
+      "Hashimotos",
+      "myxoedema",
+      "thyroidectomy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT WEGOVY TABLETS — injections / Foundayo may be offered",
+    "action_labels": {
+      "REJECT_WEGOVY_TABLETS": "REJECT WEGOVY TABLETS — injections / Foundayo may be offered"
+    },
+    "rationale": "Reject Wegovy tablets only. Offer Wegovy or Mounjaro injection, or Foundayo (no levothyroxine interaction requiring action).",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-ALLERGY-SEMAGLUTIDE",
+    "name": "Semaglutide hypersensitivity",
+    "category": "allergy",
+    "protocol_ref": "SmPC 4.3 — hypersensitivity (Wegovy injection and tablets)",
+    "action": "REJECT_PRODUCTS",
+    "products": [
+      "wegovy_inj",
+      "wegovy_tab"
+    ],
+    "keywords": [
+      "semaglutide",
+      "Wegovy",
+      "Ozempic",
+      "Rybelsus"
+    ],
+    "require_nearby": {
+      "window": 50,
+      "terms": [
+        "allerg",
+        "hypersensitiv",
+        "anaphyla",
+        "angioedema",
+        "adverse reaction",
+        "reaction to"
+      ]
+    },
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT the named product(s) only",
+    "action_labels": {
+      "REJECT_PRODUCTS": "REJECT the named product(s) only"
+    },
+    "rationale": "Reject Wegovy injection and tablets. Mounjaro or Foundayo may be considered.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-ALLERGY-TIRZEPATIDE",
+    "name": "Tirzepatide hypersensitivity",
+    "category": "allergy",
+    "protocol_ref": "SmPC 4.3 — hypersensitivity (Mounjaro)",
+    "action": "REJECT_PRODUCTS",
+    "products": [
+      "mounjaro"
+    ],
+    "keywords": [
+      "tirzepatide",
+      "Mounjaro"
+    ],
+    "require_nearby": {
+      "window": 50,
+      "terms": [
+        "allerg",
+        "hypersensitiv",
+        "anaphyla",
+        "angioedema",
+        "adverse reaction",
+        "reaction to"
+      ]
+    },
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT the named product(s) only",
+    "action_labels": {
+      "REJECT_PRODUCTS": "REJECT the named product(s) only"
+    },
+    "rationale": "Reject Mounjaro. Wegovy or Foundayo may be considered.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-ALLERGY-ORFORGLIPRON",
+    "name": "Orforglipron hypersensitivity",
+    "category": "allergy",
+    "protocol_ref": "SmPC 4.3 — hypersensitivity (Foundayo)",
+    "action": "REJECT_PRODUCTS",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "orforglipron",
+      "Foundayo"
+    ],
+    "require_nearby": {
+      "window": 50,
+      "terms": [
+        "allerg",
+        "hypersensitiv",
+        "anaphyla",
+        "angioedema",
+        "adverse reaction",
+        "reaction to"
+      ]
+    },
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT the named product(s) only",
+    "action_labels": {
+      "REJECT_PRODUCTS": "REJECT the named product(s) only"
+    },
+    "rationale": "Reject Foundayo. An injection may be considered.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-AVOID-INHIB",
+    "name": "Ritonavir / cobicistat regimen (Foundayo: avoid)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Strong CYP3A4 + OATP1B inhibitors (avoid)",
+    "action": "REJECT_FOUNDAYO",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "ritonavir",
+      "Norvir",
+      "Kaletra",
+      "lopinavir",
+      "cobicistat",
+      "Tybost",
+      "Genvoya",
+      "Stribild",
+      "Symtuza",
+      "Rezolsta",
+      "Evotaz",
+      "telaprevir"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT FOUNDAYO — offer an injection where suitable",
+    "action_labels": {
+      "REJECT_FOUNDAYO": "REJECT FOUNDAYO — offer an injection where suitable"
+    },
+    "rationale": "Reject Foundayo while co-prescribed. Offer Wegovy or Mounjaro injection where otherwise suitable.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-PAXLOVID",
+    "name": "Paxlovid course (Foundayo: avoid during course)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Nirmatrelvir/ritonavir during the course",
+    "action": "REJECT_FOUNDAYO",
+    "products": [
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 1,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "REJECT_FOUNDAYO",
+    "keywords": [
+      "Paxlovid",
+      "nirmatrelvir"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT FOUNDAYO — during the Paxlovid course",
+    "action_labels": {
+      "REJECT_FOUNDAYO": "REJECT FOUNDAYO — during the Paxlovid course",
+      "COUNSEL": "COURSE FINISHED — Foundayo may proceed"
+    },
+    "rationale": "Reject Foundayo during the 5-day course; may proceed once it has finished.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-AVOID-INDUCER",
+    "name": "Strong CYP3A4 inducer (Foundayo: avoid)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Strong CYP3A4 inducers (avoid)",
+    "action": "REJECT_FOUNDAYO",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "rifampicin",
+      "rifampin",
+      "Rifadin",
+      "Rimactane",
+      "Rifinah",
+      "Rifater",
+      "Voractiv",
+      "St John's wort",
+      "St Johns wort",
+      "St John’s wort",
+      "St. John's wort",
+      "Hypericum",
+      "primidone",
+      "Mysoline"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT FOUNDAYO — offer an injection where suitable",
+    "action_labels": {
+      "REJECT_FOUNDAYO": "REJECT FOUNDAYO — offer an injection where suitable"
+    },
+    "rationale": "Reject Foundayo while co-prescribed. St John’s wort: the patient must stop it before Foundayo is started — confirm and document.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-CAP9",
+    "name": "Strong CYP3A4 inhibitor (Foundayo max 9 mg)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Strong CYP3A4 inhibitors (max 9 mg)",
+    "action": "CAP_FOUNDAYO_9MG",
+    "products": [
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 1,
+    "action_if_outside_window": "COUNSEL",
+    "action_if_undated": "CAP_FOUNDAYO_9MG",
+    "keywords": [
+      "clarithromycin",
+      "Klaricid",
+      "itraconazole",
+      "Sporanox",
+      "posaconazole",
+      "Noxafil",
+      "voriconazole",
+      "Vfend",
+      "ketoconazole"
+    ],
+    "exclude_phrases": [
+      "ketoconazole shampoo",
+      "ketoconazole cream",
+      "ketoconazole 2%",
+      "ketoconazole 2 %"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "FOUNDAYO MAX 9 MG while co-prescribed — hold and contact (Macro 46) if above 9 mg",
+    "action_labels": {
+      "CAP_FOUNDAYO_9MG": "FOUNDAYO MAX 9 MG while co-prescribed — hold and contact (Macro 46) if above 9 mg",
+      "COUNSEL": "COURSE LIKELY FINISHED — confirm, then no cap"
+    },
+    "rationale": "Do not prescribe Foundayo above 9 mg while co-prescribed. If a course starts while above 9 mg, hold the next order and contact (Macro 46).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-SIMVASTATIN",
+    "name": "Simvastatin (Foundayo: hold, halve dose)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Simvastatin (hold, Macro 46)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "simvastatin",
+      "Zocor",
+      "Inegy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "HOLD FOUNDAYO — Macro 46; GP to halve simvastatin dose",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "HOLD FOUNDAYO — Macro 46; GP to halve simvastatin dose"
+    },
+    "rationale": "Hold, contact the patient (Macro 46) and notify the GP via Docman that the SmPC advises halving the simvastatin dose. Proceed once confirmed, or offer an injection.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-MOD-INDUCER",
+    "name": "Moderate CYP3A4 inducer (Foundayo: escalate)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Moderate CYP3A4 inducers (escalate §8.2)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "bosentan",
+      "Tracleer",
+      "Stayveer",
+      "efavirenz",
+      "Sustiva",
+      "Atripla"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "ESCALATE FOUNDAYO — Clinical Lead before supply (§8.2)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "ESCALATE FOUNDAYO — Clinical Lead before supply (§8.2)"
+    },
+    "rationale": "Escalate to the Clinical Lead before supplying Foundayo. Injections unaffected.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-TOPOTECAN",
+    "name": "Oral topotecan (Foundayo)",
+    "category": "medication",
+    "protocol_ref": "Service extension — not in §7.11",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "topotecan",
+      "Hycamtin"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review before Foundayo. Oral topotecan is a P-gp substrate where toxicity monitoring may be needed; the patient is likely under active oncology care (→ reject all under WL-CANCER).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-ROSUVA-40",
+    "name": "Rosuvastatin 40 mg (Foundayo: counsel)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Rosuvastatin above 20 mg (may proceed, counsel)",
+    "action": "COUNSEL",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [],
+    "match_type": "regex",
+    "patterns": [
+      "(rosuvastatin|crestor)[^0-9]{0,25}(?:30|40)\\s*mg"
+    ],
+    "structured": true,
+    "action_label": "COUNSEL FOUNDAYO — muscle pain/weakness; include in GP notification",
+    "action_labels": {
+      "COUNSEL": "COUNSEL FOUNDAYO — muscle pain/weakness; include in GP notification"
+    },
+    "rationale": "May proceed: counsel on muscle pain or weakness, include it in the GP notification and document.",
+    "fail_if_found": false,
+    "outcome": "counsel",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-ANTIHYPERTENSIVE",
+    "name": "Antihypertensive (Foundayo: counsel)",
+    "category": "medication",
+    "protocol_ref": "§7.11 — Antihypertensives (may proceed, counsel)",
+    "action": "COUNSEL",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "amlodipine",
+      "felodipine",
+      "nifedipine",
+      "lercanidipine",
+      "ramipril",
+      "lisinopril",
+      "perindopril",
+      "enalapril",
+      "losartan",
+      "candesartan",
+      "valsartan",
+      "irbesartan",
+      "olmesartan",
+      "bisoprolol",
+      "atenolol",
+      "doxazosin",
+      "indapamide",
+      "bendroflumethiazide",
+      "antihypertensive"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "COUNSEL FOUNDAYO — dizziness / light-headedness (Macro 45)",
+    "action_labels": {
+      "COUNSEL": "COUNSEL FOUNDAYO — dizziness / light-headedness (Macro 45)"
+    },
+    "rationale": "May proceed: counsel on dizziness and light-headedness and safety-net (Macro 45).",
+    "fail_if_found": false,
+    "outcome": "counsel",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-HYPOTENSION",
+    "name": "Hypotension or syncope (Foundayo: escalate)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Foundayo-specific cautions — escalate §8.2",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "hypotension",
+      "postural hypotension",
+      "orthostatic hypotension",
+      "syncope",
+      "vasovagal",
+      "recurrent dizziness"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "ESCALATE FOUNDAYO — symptomatic hypotension / syncope",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "ESCALATE FOUNDAYO — symptomatic hypotension / syncope"
+    },
+    "rationale": "Escalate before supplying Foundayo. Not relevant to the injections.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-FDY-CONDUCTION",
+    "name": "Arrhythmia or conduction disorder (Foundayo: escalate)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Foundayo-specific cautions / §7.11 — heart rate and conduction",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "foundayo"
+    ],
+    "keywords": [
+      "arrhythmia",
+      "heart block",
+      "atrioventricular block",
+      "AV block",
+      "bundle branch block",
+      "LBBB",
+      "RBBB",
+      "prolonged PR",
+      "Wolff-Parkinson-White",
+      "WPW",
+      "tachycardia",
+      "palpitations",
+      "atrial fibrillation",
+      "atrial flutter",
+      "SVT",
+      "pacemaker"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "ESCALATE FOUNDAYO — arrhythmia / conduction (§8.2)",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "ESCALATE FOUNDAYO — arrhythmia / conduction (§8.2)"
+    },
+    "rationale": "Escalate before supplying Foundayo.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-OCP-COUNSEL",
+    "name": "Oral contraceptive (Mounjaro / Foundayo counselling)",
+    "category": "medication",
+    "protocol_ref": "§7.11 / Mounjaro SmPC 4.5 — oral contraceptive efficacy",
+    "action": "COUNSEL",
+    "products": [
+      "mounjaro",
+      "foundayo"
+    ],
+    "keywords": [
+      "combined oral contraceptive",
+      "progestogen-only pill",
+      "progestogen only pill",
+      "ethinylestradiol",
+      "desogestrel",
+      "drospirenone",
+      "Microgynon",
+      "Rigevidon",
+      "Levest",
+      "Ovranette",
+      "Cilest",
+      "Cilique",
+      "Lizinna",
+      "Marvelon",
+      "Gedarel",
+      "Femodette",
+      "Millinette",
+      "Logynon",
+      "TriRegol",
+      "Zoely",
+      "Qlaira",
+      "Yasmin",
+      "Eloine",
+      "Yacella",
+      "Dretine",
+      "Lucette",
+      "Katya",
+      "Sunya",
+      "Cerazette",
+      "Cerelle",
+      "Feanolla",
+      "Zelleta",
+      "Desomono",
+      "Hana",
+      "Lovima",
+      "Aizea",
+      "Noriday",
+      "Norgeston",
+      "Slynd"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "COUNSEL — supply may proceed",
+    "action_labels": {
+      "COUNSEL": "COUNSEL — supply may proceed"
+    },
+    "rationale": "Counsel: switch to a non-oral method, or add a barrier method, for 4 weeks (Mounjaro) / 30 days (Foundayo) after starting and after each dose increase.",
+    "fail_if_found": false,
+    "outcome": "counsel",
+    "weight": 1
+  },
+  {
+    "id": "WL-ASPIRATION",
+    "name": "Planned anaesthesia, sedation or endoscopy",
+    "category": "condition",
+    "protocol_ref": "SmPC 4.4 (all GLP-1s) — pulmonary aspiration; §7.11 class warnings",
+    "action": "COUNSEL",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "general anaesthetic",
+      "general anaesthesia",
+      "general anesthesia",
+      "deep sedation",
+      "planned surgery",
+      "awaiting surgery",
+      "surgical waiting list",
+      "pre-operative assessment",
+      "pre-op assessment",
+      "preoperative assessment",
+      "endoscopy",
+      "gastroscopy",
+      "OGD",
+      "colonoscopy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "COUNSEL — supply may proceed",
+    "action_labels": {
+      "COUNSEL": "COUNSEL — supply may proceed"
+    },
+    "rationale": "Counsel: tell the surgical or endoscopy team about the GLP-1 before any anaesthetic or sedation.",
+    "fail_if_found": false,
+    "outcome": "counsel",
+    "weight": 1
+  },
+  {
+    "id": "WL-AKI",
+    "name": "Acute kidney injury / dehydration",
+    "category": "condition",
+    "protocol_ref": "SmPC 4.4 — dehydration and renal impairment; §7.11 class warnings",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "acute kidney injury",
+      "AKI",
+      "acute renal failure",
+      "severe dehydration"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review. Check the current eGFR and hydration; counsel on fluid intake if GI side effects occur.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-ANTIEMETIC",
+    "name": "Antiemetic",
+    "category": "medication",
+    "protocol_ref": "§9.8 knowledge base — Antiemetics (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "ondansetron",
+      "metoclopramide",
+      "domperidone",
+      "prochlorperazine",
+      "Buccastem",
+      "cyclizine"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "More information needed. If taken for GLP-1 side effects, check whether the dose needs adjusting or the medicine changing.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-CARDIAC",
+    "name": "Cardiac condition (escalate)",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Cardiology (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "date_sensitive": true,
+    "lookback_months": 2,
+    "action_if_outside_window": "FLAG_PRESCRIBER",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "keywords": [
+      "ischaemic heart disease",
+      "IHD",
+      "coronary artery disease",
+      "coronary heart disease",
+      "angina",
+      "myocardial infarction",
+      "heart attack",
+      "STEMI",
+      "NSTEMI",
+      "acute coronary syndrome",
+      "ACS",
+      "coronary stent",
+      "PCI",
+      "CABG",
+      "coronary artery bypass",
+      "atrial fibrillation",
+      "AF",
+      "AFib",
+      "atrial flutter",
+      "supraventricular tachycardia",
+      "SVT",
+      "heart block",
+      "atrioventricular block",
+      "pacemaker",
+      "implantable cardioverter defibrillator",
+      "defibrillator",
+      "cardiomyopathy",
+      "congenital heart disease",
+      "septal defect",
+      "patent ductus arteriosus",
+      "tetralogy of Fallot",
+      "transposition of the great arteries",
+      "hypoplastic left heart",
+      "POTS",
+      "postural orthostatic tachycardia syndrome"
+    ],
+    "stem_keywords": [
+      "myocard",
+      "cardiomyopath"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "ESCALATE — stable, asymptomatic, no event in 8 weeks?",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "ESCALATE — stable, asymptomatic, no event in 8 weeks?"
+    },
+    "rationale": "Escalate. IHD: OK if stable, asymptomatic and no cardiac event in the last 8 weeks. AF: OK if controlled on non-NTI medicines with no stage 4 HF or cardiomyopathy. SVT / heart block / pacemaker: OK if controlled and asymptomatic. POTS: reject if symptomatic.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-STROKE",
+    "name": "Stroke or TIA (type to confirm)",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Neurology (ischaemic stroke prescribe; haemorrhagic escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "stroke",
+      "CVA",
+      "cerebrovascular accident",
+      "TIA",
+      "transient ischaemic attack",
+      "haemorrhagic stroke",
+      "intracerebral haemorrhage",
+      "subarachnoid haemorrhage"
+    ],
+    "exclude_phrases": [
+      "ischaemic stroke",
+      "heat stroke",
+      "heatstroke",
+      "sun stroke"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "ESCALATE — confirm ischaemic vs haemorrhagic",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "ESCALATE — confirm ischaemic vs haemorrhagic"
+    },
+    "rationale": "Confirm the type. Ischaemic stroke/TIA → may prescribe. Haemorrhagic → escalate (when, how treated, current condition).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-EPILEPSY",
+    "name": "Epilepsy or seizures",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Epilepsy (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "epilepsy",
+      "epileptic",
+      "seizure",
+      "seizures",
+      "convulsion",
+      "convulsions",
+      "levetiracetam",
+      "Keppra",
+      "sodium valproate",
+      "Epilim",
+      "topiramate",
+      "zonisamide",
+      "lacosamide",
+      "brivaracetam"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. If under a neurologist, they need to be aware. Carbamazepine, phenytoin and phenobarbital are NTI exclusions (separate rule).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-HEPATIC-ESCALATE",
+    "name": "Hepatitis or deranged LFTs",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Viral / autoimmune hepatitis, deranged LFTs (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "hepatitis",
+      "hepatitis B",
+      "hepatitis C",
+      "viral hepatitis",
+      "autoimmune hepatitis",
+      "deranged LFTs",
+      "deranged LFT",
+      "abnormal LFTs",
+      "abnormal liver function",
+      "raised ALT",
+      "transaminitis",
+      "liver fibrosis",
+      "hepatic fibrosis"
+    ],
+    "stem_keywords": [
+      "hepatit"
+    ],
+    "exclude_phrases": [
+      "hepatitis a vaccination",
+      "hepatitis b vaccination",
+      "hepatitis a vaccine",
+      "hepatitis b vaccine",
+      "hepatitis b immunisation",
+      "hepatitis a immunisation",
+      "hepatitis b booster",
+      "hepatitis b screening",
+      "hepatitis c screening",
+      "hepatitis b antibody",
+      "hepatitis b surface antibody"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. Acute or active hepatitis → reject. Chronic/carrier status may be acceptable without cirrhosis (specialist letter). Deranged LFTs: confirm no viral hepatitis; otherwise usually safe.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-GI-ESCALATE",
+    "name": "Other GI / biliary (escalate)",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — GI (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "bile acid malabsorption",
+      "infective colitis",
+      "ischaemic colitis",
+      "microscopic colitis",
+      "gallbladder polyp",
+      "gall bladder polyp",
+      "splenectomy",
+      "colectomy",
+      "bowel resection",
+      "cholangitis"
+    ],
+    "exclude_phrases": [
+      "primary biliary cholangitis"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. Bile acid malabsorption: reject if symptomatic and under a consultant. Colitis: may be safe if resolved. Gallbladder polyp: OK if benign with no gallstones. Splenectomy: check reason (post-trauma usually OK). Bowel removed: confirm no stoma.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-ENDO-ESCALATE",
+    "name": "Thyroid / pituitary (escalate)",
+    "category": "condition",
+    "protocol_ref": "§9.8 Cat A (overactive thyroid awaiting RAI/surgery) / knowledge base",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "hyperthyroidism",
+      "overactive thyroid",
+      "thyrotoxicosis",
+      "Graves",
+      "Graves disease",
+      "radioactive iodine",
+      "radioiodine",
+      "carbimazole",
+      "propylthiouracil",
+      "thyroid nodule",
+      "thyroid nodules",
+      "hypopituitarism",
+      "pituitary adenoma",
+      "pituitary tumour",
+      "prolactinoma",
+      "hyperprolactinaemia",
+      "cabergoline",
+      "bromocriptine"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "CHECK — awaiting radioiodine or thyroid surgery → reject",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "CHECK — awaiting radioiodine or thyroid surgery → reject"
+    },
+    "rationale": "Overactive thyroid awaiting radioiodine or surgery → reject. Otherwise Graves’/hyperthyroidism is usually safe if well and no treatment change in 6 months. Thyroid nodules U3+ and pituitary disease → escalate (endocrinologist).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-TRIGLYCERIDES",
+    "name": "Raised triglycerides",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Raised triglycerides (fasting >4.5 reject)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "hypertriglyceridaemia",
+      "hypertriglyceridemia",
+      "raised triglycerides",
+      "high triglycerides",
+      "elevated triglycerides"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. Fasting triglycerides above 4.5 mmol/L → do not prescribe (pancreatitis risk). Confirm the test was fasted; if not, ask for a fasted repeat.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-OBS-TG",
+    "name": "Triglyceride result",
+    "category": "observation",
+    "protocol_ref": "§9.8 knowledge base — Raised triglycerides",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "match_type": "regex",
+    "patterns": [
+      "\\b(?:serum\\s+)?(?:fasting\\s+)?(?:triglycerides?|TG)\\b\\s*(?:level)?\\s*[:=]?\\s*(\\d{1,2}(?:\\.\\d+)?)"
+    ],
+    "keywords": [],
+    "structured": true,
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Triglycerides above 4.5 mmol/L are flagged for a fasted check.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-RENAL-OTHER",
+    "name": "Solitary kidney / transplant / cysts",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Renal (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "solitary kidney",
+      "single functioning kidney",
+      "single kidney",
+      "unilateral kidney",
+      "nephrectomy",
+      "kidney transplant",
+      "renal transplant",
+      "kidney cyst",
+      "kidney cysts",
+      "renal cyst",
+      "renal cysts"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate: OK if eGFR >30 in the last 6 months. Kidney cysts: OK if not PKD and eGFR >30.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-AUTOIMMUNE",
+    "name": "Autoimmune disease or DMARD",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Autoimmune disorder; DMARDs (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "lupus",
+      "SLE",
+      "systemic lupus erythematosus",
+      "rheumatoid arthritis",
+      "psoriatic arthritis",
+      "ankylosing spondylitis",
+      "autoimmune",
+      "vasculitis",
+      "DMARD",
+      "hydroxychloroquine",
+      "sulfasalazine",
+      "azathioprine",
+      "leflunomide",
+      "Metoject",
+      "methotrexate injection",
+      "adalimumab",
+      "etanercept",
+      "infliximab",
+      "tocilizumab",
+      "baricitinib",
+      "tofacitinib"
+    ],
+    "exclude_phrases": [
+      "autoimmune hepatitis"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. Likely safe if stable for 6 months, not on steroids or NTI medicines, and the rheumatology team is aware (recent clinic letter recommended). Oral methotrexate is an NTI exclusion.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-HIV",
+    "name": "HIV",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — HIV (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "HIV",
+      "human immunodeficiency virus",
+      "AIDS",
+      "acquired immunodeficiency syndrome",
+      "Biktarvy",
+      "Triumeq",
+      "Dovato",
+      "Descovy",
+      "Truvada",
+      "dolutegravir",
+      "bictegravir",
+      "tenofovir",
+      "emtricitabine"
+    ],
+    "exclude_phrases": [
+      "hearing aids",
+      "hearing aid",
+      "walking aids",
+      "mobility aids",
+      "visual aids",
+      "aids to daily living",
+      "HIV test negative",
+      "HIV negative",
+      "HIV PrEP"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. OK if stable with no acute complications or advanced disease; the patient should inform their specialist. Ritonavir/cobicistat-boosted regimens reject Foundayo (separate rule).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-ANAEMIA",
+    "name": "Anaemia",
+    "category": "condition",
+    "protocol_ref": "§9.8 knowledge base — Anaemia (escalate)",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "anaemia",
+      "anemia",
+      "iron deficiency anaemia",
+      "pernicious anaemia",
+      "B12 deficiency anaemia"
+    ],
+    "stem_keywords": [
+      "anaemi"
+    ],
+    "exclude_phrases": [
+      "sickle cell anaemia"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Escalate. Safe if not malignant, being treated and not symptomatic.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-VTE-ANTICOAG",
+    "name": "VTE / anticoagulant (not in protocol)",
+    "category": "condition",
+    "protocol_ref": "Not in EDM-WL-01 v2.3 — confirm against EDM-WM-CI-01",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "venous thromboembolism",
+      "VTE",
+      "deep vein thrombosis",
+      "DVT",
+      "pulmonary embolism",
+      "blood clot",
+      "apixaban",
+      "Eliquis",
+      "rivaroxaban",
+      "Xarelto",
+      "dabigatran",
+      "Pradaxa",
+      "edoxaban",
+      "Lixiana",
+      "anticoagulant",
+      "anticoagulation"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review. VTE and DOACs are not named in EDM-WL-01; DOACs are not NTI medicines. Warfarin and other coumarins remain NTI exclusions (WL-MED-NTI).",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-HAEM-OTHER",
+    "name": "Other haematology (not in protocol)",
+    "category": "condition",
+    "protocol_ref": "Not in EDM-WL-01 v2.3 — confirm against EDM-WM-CI-01",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "idiopathic thrombocytopenic purpura",
+      "ITP",
+      "immune thrombocytopenia",
+      "hereditary spherocytosis",
+      "autoimmune haemolytic anaemia",
+      "myelofibrosis",
+      "polycythaemia",
+      "polycythemia",
+      "essential thrombocythaemia"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-OTHER-UNLISTED",
+    "name": "Other previous reject keywords (not in protocol)",
+    "category": "condition",
+    "protocol_ref": "Not in EDM-WL-01 v2.3 — confirm against EDM-WM-CI-01",
+    "action": "FLAG_PRESCRIBER",
+    "products": [
+      "mounjaro",
+      "wegovy_inj",
+      "wegovy_tab",
+      "foundayo"
+    ],
+    "keywords": [
+      "multiple sclerosis",
+      "hypercalcaemia",
+      "hypercalcemia",
+      "myopathy",
+      "flecainide",
+      "Tambocor",
+      "pramlintide"
+    ],
+    "exclude_phrases": [
+      "cardiomyopathy"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "PRESCRIBER REVIEW — record decision",
+    "action_labels": {
+      "FLAG_PRESCRIBER": "PRESCRIBER REVIEW — record decision"
+    },
+    "rationale": "Review. Flecainide is not on the protocol NTI list.",
+    "fail_if_found": false,
+    "outcome": "flag",
+    "weight": 1
+  },
+  {
+    "id": "WL-GI-OBSTRUCTION",
+    "name": "Bowel obstruction, ileus or faecal impaction",
+    "category": "condition",
+    "protocol_ref": "SmPC 4.4 / 4.8 — severe gastrointestinal disease; post-marketing intestinal obstruction",
+    "action": "REJECT_SERVICE",
+    "products": ["mounjaro", "wegovy_inj", "wegovy_tab", "foundayo"],
+    "keywords": [
+      "ileus",
+      "paralytic ileus",
+      "subileus",
+      "intestinal obstruction",
+      "bowel obstruction",
+      "obstructed bowel",
+      "small bowel obstruction",
+      "large bowel obstruction",
+      "gut obstruction",
+      "faecal impaction",
+      "fecal impaction",
+      "faecal loading",
+      "fecal loading"
+    ],
+    "stem_keywords": ["ileus", "intestin", "bowel"],
+    "exclude_phrases": [
+      "irritable bowel",
+      "inflammatory bowel",
+      "bowel cancer",
+      "bowel screening",
+      "bowel habit",
+      "bowel sounds",
+      "bowel prep",
+      "open bowel",
+      "intestinal metaplasia"
+    ],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — all GLP-1 products",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — all GLP-1 products"
+    },
+    "rationale": "Reject all products. An existing bowel obstruction, ileus, or faecal impaction is severe gastrointestinal disease. These medicines slow the gut, and intestinal obstruction is a named post-marketing reaction.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  },
+  {
+    "id": "WL-SUBSTANCE",
+    "name": "Illicit or dependent drug use",
+    "category": "condition",
+    "protocol_ref": "§12.6 — substance misuse",
+    "action": "REJECT_SERVICE",
+    "date_sensitive": true,
+    "lookback_months": 12,
+    "action_if_outside_window": "FLAG_PRESCRIBER",
+    "action_if_undated": "FLAG_PRESCRIBER",
+    "products": ["mounjaro", "wegovy_inj", "wegovy_tab", "foundayo"],
+    "keywords": [
+      "heroin",
+      "diamorphine dependence",
+      "cocaine",
+      "crack cocaine",
+      "cannabis",
+      "cannabis use",
+      "cannabis misuse",
+      "methadone",
+      "buprenorphine",
+      "Subutex",
+      "Espranor",
+      "substance misuse",
+      "substance abuse",
+      "drug misuse",
+      "drug dependence",
+      "IVDU",
+      "intravenous drug"
+    ],
+    "stem_keywords": ["heroin", "cocain", "cannab", "methadon"],
+    "structured": true,
+    "match": "whole_word",
+    "action_label": "REJECT — substance misuse within 12 months (§12.6)",
+    "action_labels": {
+      "REJECT_SERVICE": "REJECT — substance misuse within 12 months (§12.6)",
+      "FLAG_PRESCRIBER": "HOLD — confirm whether use is current"
+    },
+    "rationale": "Within 12 months or undated: do not supply remotely. Older history: hold and confirm it has stopped. Alcohol stays on its own rule.",
+    "fail_if_found": true,
+    "outcome": "reject",
+    "weight": 1
+  }
+]
