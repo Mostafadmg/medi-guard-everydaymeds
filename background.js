@@ -18,6 +18,49 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 chrome.storage.local.remove("mgReopenPanel");
 
+// Pull a newer copy from GitHub. The updater program replaces the files;
+// this restarts the extension once those files are in place.
+const UPDATE_MANIFEST_URL = "https://raw.githubusercontent.com/Mostafadmg/medi-guard-everydaymeds/main/manifest.json";
+const UPDATE_RETRY_MS = 30 * 60 * 1000;
+
+function isNewerVersion(remote, local) {
+  const a = String(remote || "").split(".").map((n) => parseInt(n, 10) || 0);
+  const b = String(local || "").split(".").map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x !== y) return x > y;
+  }
+  return false;
+}
+
+async function checkForExtensionUpdate() {
+  try {
+    const local = chrome.runtime.getManifest().version;
+    const res = await fetch(UPDATE_MANIFEST_URL, { cache: "no-store" });
+    if (!res.ok) return;
+    const remoteManifest = await res.json();
+    const remote = remoteManifest && remoteManifest.version;
+    if (!isNewerVersion(remote, local)) return;
+    const stored = await chrome.storage.local.get("mgUpdateAttempt");
+    const attempt = stored.mgUpdateAttempt || {};
+    if (attempt.version === remote && Date.now() - (attempt.at || 0) < UPDATE_RETRY_MS) return;
+    await chrome.storage.local.set({ mgUpdateAttempt: { version: remote, at: Date.now() } });
+    chrome.runtime.reload();
+  } catch (e) {
+    console.warn("update check failed", e);
+  }
+}
+
+checkForExtensionUpdate();
+if (chrome.alarms) {
+  chrome.alarms.create("mgUpdateCheck", { periodInMinutes: 30 });
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === "mgUpdateCheck") checkForExtensionUpdate();
+  });
+}
+
 // ── NHS SCR session — track tabs opened after "Go to NHS SCR" ───────────────
 const SCR_SESSION_KEY = "scrSession";
 const SCR_TRACK_MS = 10 * 60 * 1000;

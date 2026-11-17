@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "MediGuard AI — EverydayMeds",
-  "version": "1.0",
+  "version": "1.1",
   "description": "AI-powered clinical decision support for GLP-1 prescribing on EverydayMeds. Step-by-step workflow dashboard with tab completion.",
   "permissions": [
     "sidePanel",
     "activeTab",
     "scripting",
     "storage",
+    "alarms",
     "windows",
     "tabs"
   ],
@@ -19,7 +20,8 @@
     "https://*.replit.dev/*",
     "https://api.openai.com/*",
     "https://api.tavily.com/*",
-    "https://api.duckduckgo.com/*"
+    "https://api.duckduckgo.com/*",
+    "https://raw.githubusercontent.com/*"
   ],
   "background": {
     "service_worker": "background.js"
