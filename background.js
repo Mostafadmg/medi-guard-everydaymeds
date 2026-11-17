@@ -902,6 +902,14 @@ function clickSearchResultMainWorld(patient) {
 
 function openClinicalRecordMainWorld(patient) {
   function clickEl(el) {
+    try { el.scrollIntoView({ block: "center", behavior: "instant" }); } catch (_) {}
+    const opts = { bubbles: true, cancelable: true, view: window };
+    try {
+      el.dispatchEvent(new PointerEvent("pointerdown", opts));
+      el.dispatchEvent(new MouseEvent("mousedown", opts));
+      el.dispatchEvent(new PointerEvent("pointerup", opts));
+      el.dispatchEvent(new MouseEvent("mouseup", opts));
+    } catch (_) {}
     el.click();
   }
   const pageText = document.body?.innerText || "";
@@ -909,12 +917,10 @@ function openClinicalRecordMainWorld(patient) {
   if (document.querySelector(".clinicals-page, .scr-print-wrapper, table.scr-table, #AllergiesandAdverseReactions, #CurrentRepeatMedications")) {
     return "done";
   }
-  const last = String(patient.lastName || "").toLowerCase();
-  if (last && !pageText.toLowerCase().includes(last)) return "waiting";
   const yes = document.getElementById("access-management-yes");
   if (yes) {
     window.__mgScrYesClicks = (window.__mgScrYesClicks || 0) + 1;
-    if (window.__mgScrYesClicks <= 2) clickEl(yes);
+    if (window.__mgScrYesClicks <= 3) clickEl(yes);
     return "yes-clicked";
   }
   const clinical = document.getElementById("patient-clinicals-navigation-tab")
@@ -926,11 +932,16 @@ function openClinicalRecordMainWorld(patient) {
     || clinical.classList.contains("nhsuk-tab-set__tab--selected")
     || clinical.getAttribute("aria-current") === "page"
   );
-  if (clinical && !selected && !window.__mgScrClinicalClicked) {
-    window.__mgScrClinicalClicked = true;
-    clickEl(clinical);
-    return "clinical-clicked";
+  if (clinical && !selected) {
+    window.__mgScrClinicalClicked = (window.__mgScrClinicalClicked || 0) + 1;
+    if (window.__mgScrClinicalClicked <= 6) {
+      clickEl(clinical);
+      return "clinical-clicked";
+    }
   }
+  if (clinical && selected) return "waiting-modal";
+  const last = String(patient?.lastName || "").toLowerCase();
+  if (last && !pageText.toLowerCase().includes(last)) return "waiting";
   return "waiting";
 }
 
@@ -1083,12 +1094,12 @@ function scheduleNhsPrefill(tabId) {
           args: [patient]
         });
         const result = injected?.result;
-        if (result === "done" || result === "waiting") {
+        if (result === "done") {
           await chrome.storage.session.set({ pendingNhsPatient: null });
           nhsFillTimers.delete(tabId);
           return;
         }
-        if (result === "clinical-clicked" || result === "yes-clicked" || result === "waiting-modal") {
+        if (result === "clinical-clicked" || result === "yes-clicked" || result === "waiting-modal" || result === "waiting") {
           if (attempts < 160) nhsFillTimers.set(tabId, setTimeout(tick, 700));
           return;
         }
