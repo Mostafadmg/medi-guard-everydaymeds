@@ -836,38 +836,59 @@ async function rxPlaceOnHold(reason, docs) {
   }
 }
 
+// Visible reply box inside the native patient-communications UI.
+// The extension does not move, restyle, or widen that screen.
+function findPatientComposer() {
+  const selectors = [
+    "#od2CommsInput",
+    "#emRoot textarea",
+    "#od2ChatPanel textarea",
+    "#emRoot [contenteditable='true']",
+    "#od2ChatPanel [contenteditable='true']",
+  ];
+  for (const sel of selectors) {
+    for (const el of document.querySelectorAll(sel)) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 20 && r.height > 16) return el;
+    }
+  }
+  return null;
+}
+
+function writePatientComposer(el, text) {
+  if (!el) return;
+  if (el.isContentEditable) {
+    el.focus();
+    el.textContent = text;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    return;
+  }
+  setFieldValue(el, text);
+  autoResizeTextarea(el);
+  try { el.setSelectionRange(el.value.length, el.value.length); } catch (_) {}
+}
+
 // Send a free-text message to the patient via the on-page encrypted chat composer.
 async function sendPatientChatMessage(text) {
   try {
     const message = (text || "").trim();
     if (!message) return { success: false, error: "Message is empty" };
 
-    if (typeof window.__mgOpenCommsModal === "function") {
-      await window.__mgOpenCommsModal();
-    } else {
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    let input = findPatientComposer();
+    if (!input) {
       const fab = document.getElementById("od2ChatFab");
       if (fab) fab.click();
+      for (let i = 0; i < 30; i++) {
+        await sleep(100);
+        input = findPatientComposer();
+        if (input) break;
+      }
     }
+    if (!input) return { success: false, error: "Patient message box not found" };
 
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    let input = null;
-    for (let i = 0; i < 24; i++) {
-      await sleep(100);
-      input = document.getElementById("od2CommsInput");
-      if (input && input.offsetParent !== null) break;
-    }
-    if (!input) return { success: false, error: "Patient chat composer not found" };
-
-    const closedNotice = document.getElementById("od2CommsClosedNotice");
-    const chatClosed = closedNotice && closedNotice.offsetParent !== null;
-    if (chatClosed) {
-      const startBtn = document.getElementById("od2ChatToggleBtn");
-      if (startBtn && /start chat/i.test(startBtn.textContent || "")) startBtn.click();
-      await sleep(250);
-    }
-
-    setFieldValue(input, message);
-    autoResizeTextarea(input);
+    writePatientComposer(input, message);
     input.focus();
 
     let sendBtn = null;
@@ -4978,8 +4999,8 @@ async function getMacroCategoriesForPopout() {
 }
 
 function injectMacroModal() {
-  if (document.getElementById("mg-macro-backdrop") && document.getElementById("mg-macro-panel")) return;
-  ["mg-macro-styles", "mg-macro-tab", "mg-macro-backdrop", "mg-macro-panel", "mg-template-modal-backdrop"].forEach(id => {
+  if (document.getElementById("mg-macro-drawer") && document.getElementById("mg-macro-panel")) return;
+  ["mg-macro-styles", "mg-macro-drawer", "mg-macro-tab", "mg-macro-backdrop", "mg-macro-panel", "mg-template-modal-backdrop"].forEach(id => {
     const el = document.getElementById(id);
     if (el && el.parentNode) el.parentNode.removeChild(el);
   });
@@ -4991,58 +5012,71 @@ function injectMacroModal() {
   const style = document.createElement("style");
   style.id = "mg-macro-styles";
   style.textContent = `
-    #mg-macro-tab {
-      display: inline-flex !important; align-items: center !important; gap: 6px !important;
-      background: #7c3aed !important; color: #fff !important;
-      padding: 8px 14px !important; border-radius: 8px !important;
-      cursor: pointer !important; z-index: 2147483000 !important;
-      font: 700 12.5px/1 Inter, "Segoe UI", Arial, Helvetica, sans-serif !important;
-      box-shadow: 0 4px 14px rgba(124,58,237,0.28) !important;
-      letter-spacing: 0.01em !important; user-select: none !important;
-      border: none !important; outline: none !important;
-      transition: transform .15s ease, background .15s ease !important;
-      margin: 0 !important;
-    }
-    #mg-macro-tab {
-      position: fixed !important; left: 20px !important; bottom: 20px !important;
-      padding: 12px 18px 12px 16px !important; border-radius: 999px !important;
-      font-size: 14px !important;
-      box-shadow: 0 8px 20px rgba(124,58,237,0.35), 0 2px 6px rgba(0,0,0,0.15) !important;
-    }
-    #mg-macro-tab:hover { background: #6d28d9 !important; transform: translateY(-1px); }
-    #mg-macro-tab svg { width: 18px; height: 18px; }
-
-    #mg-macro-backdrop {
-      position: fixed !important; inset: 0 !important;
-      background: rgba(2, 6, 23, 0.62) !important;
-      backdrop-filter: blur(4px) !important;
-      z-index: 2147482999 !important;
-      opacity: 0; pointer-events: none;
-      transition: opacity .22s ease !important;
-    }
-    #mg-macro-backdrop.open { opacity: 1; pointer-events: auto; }
-
-    #mg-macro-panel {
-      position: fixed !important; left: 50% !important; top: 50% !important;
-      transform: translate(-50%, -48%) scale(.96) !important;
-      width: min(1280px, calc(100vw - 24px)) !important;
-      height: min(900px, calc(100vh - 32px)) !important;
-      background: #0f172a !important; color: #e2e8f0 !important;
-      border-radius: 16px !important; border: 1px solid #334155 !important;
-      box-shadow: 0 32px 80px rgba(0,0,0,0.55) !important;
-      overflow: hidden !important; display: flex !important; flex-direction: column !important;
-      opacity: 0; pointer-events: none;
-      transition: opacity .22s ease, transform .22s ease !important;
-      z-index: 2147483000 !important;
+    /* Right-edge tab, same size and placement idea as .template-customizer-open-btn.
+       The drawer sits above the patient-communications modal (.em-backdrop). */
+    #mg-macro-drawer {
+      position: fixed !important;
+      top: 0 !important;
+      right: 0 !important;
+      height: 100% !important;
+      width: min(880px, calc(100vw - 52px)) !important;
+      z-index: 2147483600 !important;
+      transform: translateX(100%) !important;
+      transition: transform .25s ease !important;
+      pointer-events: none !important;
       font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif !important;
     }
-    #mg-macro-panel.open {
-      opacity: 1 !important; pointer-events: auto !important;
-      transform: translate(-50%, -50%) scale(1) !important;
+    #mg-macro-drawer.open {
+      transform: translateX(0) !important;
+      pointer-events: auto !important;
     }
-    body.swal2-shown #mg-macro-panel,
-    body.swal2-shown #mg-macro-backdrop,
-    body.swal2-shown #mg-macro-tab { display: none !important; }
+    #mg-macro-tab {
+      position: absolute !important;
+      top: 226px !important;
+      left: -38px !important;
+      width: 38px !important;
+      height: 38px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      border: none !important;
+      outline: none !important;
+      border-radius: 0.375rem 0 0 0.375rem !important;
+      background: #696cff !important;
+      color: #fff !important;
+      cursor: pointer !important;
+      pointer-events: auto !important;
+      box-shadow: 0 0.125rem 0.375rem rgba(47, 43, 61, 0.28) !important;
+      z-index: 2 !important;
+    }
+    #mg-macro-tab:hover { background: #5f61e6 !important; }
+    #mg-macro-tab svg { width: 18px; height: 18px; display: block; }
+
+    #mg-macro-backdrop { display: none !important; }
+
+    #mg-macro-panel {
+      position: relative !important;
+      left: auto !important;
+      top: auto !important;
+      transform: none !important;
+      width: 100% !important;
+      height: 100% !important;
+      background: #0f172a !important;
+      color: #e2e8f0 !important;
+      border-radius: 0 !important;
+      border: none !important;
+      border-left: 1px solid #334155 !important;
+      box-shadow: -12px 0 40px rgba(0, 0, 0, 0.35) !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif !important;
+    }
+    body.swal2-shown #mg-macro-drawer { visibility: hidden !important; }
 
     #mg-macro-panel .mg-mac-header {
       display: flex; align-items: center; gap: 12px;
@@ -5131,7 +5165,7 @@ function injectMacroModal() {
       position: fixed !important; inset: 0 !important;
       background: rgba(2, 6, 23, 0.72) !important;
       backdrop-filter: blur(4px) !important;
-      z-index: 2147483001 !important;
+      z-index: 2147483640 !important;
       display: grid; place-items: center;
       opacity: 0; pointer-events: none;
       transition: opacity .2s ease !important;
@@ -5462,102 +5496,6 @@ function injectMacroModal() {
       padding: 20px 12px; text-align: center; color: #64748b; font-size: 12.5px;
     }
     .mg-mac-hl { background: rgba(250,204,21,0.35); color: #fef9c3; padding: 0 2px; border-radius: 2px; font-weight: 700; }
-
-    .od2-comms-composer { position: relative; }
-
-    /* Hide native floating chat — only visible inside our modal */
-    .od2-chat-panel:not(.mg-comms-embedded) {
-      visibility: hidden !important;
-      opacity: 0 !important;
-      pointer-events: none !important;
-      position: fixed !important;
-      left: -10000px !important;
-      top: auto !important;
-      bottom: 0 !important;
-      width: 1px !important;
-      height: 1px !important;
-      overflow: hidden !important;
-      z-index: -1 !important;
-    }
-    #mg-comms-chat-slot {
-      display: none;
-      flex: 1.2;
-      min-width: 480px;
-      min-height: 0;
-      background: #f8fafc;
-      border-left: 1px solid #1e293b;
-      overflow: hidden;
-    }
-    #mg-macro-panel.mg-comms-mode {
-      width: min(1820px, calc(100vw - 1rem)) !important;
-      height: calc(100vh - 2rem) !important;
-      max-height: calc(100vh - 2rem) !important;
-    }
-    #mg-macro-panel.mg-comms-mode.open {
-      transform: translate(-50%, calc(-50% + 0.35rem)) scale(1) !important;
-    }
-    #mg-macro-panel.mg-comms-mode .mg-mac-header { display: none !important; }
-    #mg-macro-panel.mg-comms-mode #mg-comms-chat-slot { display: flex; flex-direction: column; }
-    #mg-macro-panel.mg-comms-mode #mg-macro-detail {
-      flex: 1;
-      min-width: 360px;
-      max-width: 580px;
-      border-right: 1px solid #1e293b;
-    }
-    #mg-macro-panel.mg-comms-mode #mg-macro-sidebar { width: 320px; }
-
-    .od2-chat-panel.mg-comms-embedded {
-      visibility: visible !important;
-      opacity: 1 !important;
-      pointer-events: auto !important;
-      position: relative !important;
-      inset: auto !important;
-      left: auto !important;
-      top: auto !important;
-      right: auto !important;
-      bottom: auto !important;
-      width: 100% !important;
-      height: 100% !important;
-      max-width: none !important;
-      max-height: none !important;
-      margin: 0 !important;
-      border-radius: 0 !important;
-      box-shadow: none !important;
-      transform: none !important;
-      display: flex !important;
-      flex-direction: column !important;
-      z-index: auto !important;
-    }
-    .od2-chat-panel.mg-comms-embedded .od2-comms-thread { flex: 1; min-height: 0; overflow-y: auto; }
-    .od2-chat-panel.mg-comms-embedded .od2-comms-composer {
-      flex-shrink: 0;
-      display: flex !important;
-      align-items: flex-end;
-      gap: 12px;
-      padding: 14px 16px 18px !important;
-      box-sizing: border-box;
-      border-top: 1px solid #e2e8f0;
-      background: #fff;
-    }
-    .od2-chat-panel.mg-comms-embedded .od2-comms-closed-notice {
-      flex-shrink: 0;
-      padding: 12px 16px 18px !important;
-      box-sizing: border-box;
-    }
-    .od2-chat-panel.mg-comms-embedded #od2CommsInput {
-      flex: 1;
-      min-height: 120px !important;
-      max-height: 600px !important;
-      resize: none !important;
-      line-height: 1.5 !important;
-      margin: 0 !important;
-      box-sizing: border-box !important;
-      overflow-y: hidden;
-    }
-    .od2-chat-panel.mg-comms-embedded #od2CommsSendBtn {
-      flex-shrink: 0;
-      margin-bottom: 2px;
-    }
   `;
   document.head.appendChild(style);
 
@@ -5565,14 +5503,14 @@ function injectMacroModal() {
   tab.id = "mg-macro-tab";
   tab.type = "button";
   tab.setAttribute("aria-label", "Open patient email macros");
+  tab.setAttribute("aria-expanded", "false");
+  tab.title = "Macros";
   tab.innerHTML = `
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <rect x="3" y="5" width="18" height="14" rx="2"></rect>
       <path d="M3 7l9 6 9-6"></path>
     </svg>
-    Macros
   `;
-  document.body.appendChild(tab);
 
   const backdrop = document.createElement("div");
   backdrop.id = "mg-macro-backdrop";
@@ -5588,7 +5526,7 @@ function injectMacroModal() {
       <div class="mg-mac-logo">✉️</div>
       <div class="mg-mac-titles">
         <div class="mg-mac-title">Patient Email Macros</div>
-        <div class="mg-mac-subtitle">Search by category • Edit • Copy or insert into chat</div>
+        <div class="mg-mac-subtitle">Search by category • Edit • Copy</div>
       </div>
       <button id="mg-macro-close" type="button" aria-label="Close">✕</button>
     </div>
@@ -5675,11 +5613,26 @@ function injectMacroModal() {
           </div>
         </div>
       </section>
-      <section id="mg-comms-chat-slot" aria-label="Patient chat"></section>
     </div>
   `;
+
+  const drawer = document.createElement("div");
+  drawer.id = "mg-macro-drawer";
+  drawer.appendChild(tab);
+  drawer.appendChild(panel);
   document.body.appendChild(backdrop);
-  document.body.appendChild(panel);
+  document.body.appendChild(drawer);
+
+  function placeMacroTab() {
+    const anchor = document.querySelector(".template-customizer-open-btn");
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    if (!rect.height) return;
+    tab.style.setProperty("top", `${Math.round(rect.bottom + 8)}px`, "important");
+  }
+  placeMacroTab();
+  window.__mgPlaceMacroTab = placeMacroTab;
+  window.addEventListener("resize", placeMacroTab);
 
   const templateModalBackdrop = document.createElement("div");
   templateModalBackdrop.id = "mg-template-modal-backdrop";
@@ -5842,11 +5795,7 @@ function injectMacroModal() {
   let selectedKey = null;
   let editingTemplateId = null;
   let categories = [];
-  let commsMode = false;
-  let chatOriginalParent = null;
   const CUSTOM_MACRO_KEY = "__custom__";
-  const chatSlot = panel.querySelector("#mg-comms-chat-slot");
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   function getCustomTemplateBody() {
     return "Dear {patient_name},\n\n\n\nKind regards,\nEveryDayMeds Clinical Team";
@@ -6437,32 +6386,30 @@ function injectMacroModal() {
     if (!aiResult) return;
     const text = String(aiResult.value || "").trim();
     if (!text) return;
-    if (!commsMode) {
-      await openCommsModal();
+    const input = findPatientComposer();
+    if (!input) {
+      try { await navigator.clipboard.writeText(text); } catch (_) {}
+      if (aiInsertChatBtn) {
+        const prev = aiInsertChatBtn.textContent;
+        aiInsertChatBtn.textContent = "Copied ✓";
+        setTimeout(() => { aiInsertChatBtn.textContent = prev; }, 1600);
+      }
+      return;
     }
-    let input = null;
-    for (let i = 0; i < 24; i++) {
-      await sleep(80);
-      input = document.getElementById("od2CommsInput");
-      if (input && input.offsetParent !== null) break;
-    }
-    if (!input) return;
-    const closedNotice = document.getElementById("od2CommsClosedNotice");
-    if (closedNotice && closedNotice.offsetParent !== null) {
-      const startBtn = document.getElementById("od2ChatToggleBtn");
-      if (startBtn && /start chat/i.test(startBtn.textContent || "")) startBtn.click();
-      await sleep(200);
-    }
-    setFieldValue(input, text);
-    autoResizeTextarea(input);
+    writePatientComposer(input, text);
     input.focus();
-    try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) {}
   }
 
   function getPatientName() {
     try {
       const sub = document.querySelector(".chat-panel-sub");
       if (sub && sub.textContent) return String(sub.textContent).trim().split(/\s+/)[0];
+    } catch (_) {}
+    try {
+      const header = document.querySelector(".od2-chat-panel-header");
+      const text = header ? String(header.innerText || "").replace(/\s+/g, " ").trim() : "";
+      const match = text.match(/communications\s+(.+?)(?:\s+Send\b|$)/i);
+      if (match && match[1]) return match[1].trim().split(/\s+/)[0];
     } catch (_) {}
     try {
       const pd = window.patientData || (typeof patientData !== "undefined" ? patientData : null);
@@ -6704,104 +6651,22 @@ function injectMacroModal() {
     const entry = getSelectedEntry();
     if (!entry) return;
     const text = getDetailText() || fillPlaceholders(entry.macro.body || "");
-    if (!commsMode) {
-      await openCommsModal();
-    }
-    let input = null;
-    for (let i = 0; i < 24; i++) {
-      await sleep(80);
-      input = document.getElementById("od2CommsInput");
-      if (input && input.offsetParent !== null) break;
-    }
-    if (!input) return;
-    const closedNotice = document.getElementById("od2CommsClosedNotice");
-    if (closedNotice && closedNotice.offsetParent !== null) {
-      const startBtn = document.getElementById("od2ChatToggleBtn");
-      if (startBtn && /start chat/i.test(startBtn.textContent || "")) startBtn.click();
-      await sleep(200);
-    }
-    setFieldValue(input, text);
-    autoResizeTextarea(input);
-    input.focus();
-    try { input.setSelectionRange(input.value.length, input.value.length); } catch (_) {}
-  }
-
-  async function ensureNativeChatOpen() {
-    const chatPanel = document.getElementById("od2ChatPanel");
-    const fab = document.getElementById("od2ChatFab");
-    if (!chatPanel || !fab) return false;
-    if (chatPanel.classList.contains("is-open")) return true;
-    window.__mgOpeningCommsInternal = true;
-    try { fab.click(); } finally { window.__mgOpeningCommsInternal = false; }
-    for (let i = 0; i < 40; i++) {
-      await sleep(50);
-      if (chatPanel.classList.contains("is-open")) return true;
-    }
-    return false;
-  }
-
-  function bindEmbeddedChatClose() {
-    const nativeClose = document.getElementById("od2ChatPanelClose");
-    if (!nativeClose || nativeClose.dataset.mgBound) return;
-    nativeClose.dataset.mgBound = "1";
-    nativeClose.addEventListener("click", (e) => {
-      if (!commsMode) return;
-      e.preventDefault();
-      e.stopPropagation();
-      closePanel();
-    }, true);
-  }
-
-  function embedNativeChat() {
-    const chatPanel = document.getElementById("od2ChatPanel");
-    if (!chatPanel || !chatSlot) return false;
-    if (!chatOriginalParent) chatOriginalParent = chatPanel.parentElement;
-    chatPanel.classList.add("mg-comms-embedded");
-    chatSlot.appendChild(chatPanel);
-    panel.classList.add("mg-comms-mode");
-    commsMode = true;
-    bindEmbeddedChatClose();
-    bindCommsInputAutoResize();
-    return true;
-  }
-
-  function unembedNativeChat() {
-    const chatPanel = document.getElementById("od2ChatPanel");
-    if (!chatPanel) return;
-    chatPanel.classList.remove("mg-comms-embedded");
-    if (chatOriginalParent && chatOriginalParent.isConnected) {
-      chatOriginalParent.appendChild(chatPanel);
-    } else {
-      document.body.appendChild(chatPanel);
-    }
-    panel.classList.remove("mg-comms-mode");
-    commsMode = false;
-  }
-
-  async function openCommsModal() {
-    if (panel.classList.contains("open") && commsMode) {
-      document.getElementById("od2CommsInput")?.focus();
+    const input = findPatientComposer();
+    if (!input) {
+      try { await navigator.clipboard.writeText(text); } catch (_) {}
+      copyBtn.classList.add("copied");
+      copyLabel.textContent = "Copied ✓";
+      setTimeout(() => {
+        copyBtn.classList.remove("copied");
+        copyLabel.textContent = "Copy";
+      }, 1600);
       return;
     }
-    const ok = await ensureNativeChatOpen();
-    if (!ok) return;
-    selectedKey = CUSTOM_MACRO_KEY;
-    embedNativeChat();
-    openPanel();
-    renderList();
-    renderDetail();
-    restoreMacroModalSession();
-    setTimeout(() => {
-      if (customDetailMode === "ai") aiPrompt?.focus();
-      else detailPreview?.focus();
-    }, 120);
+    writePatientComposer(input, text);
+    input.focus();
   }
 
-  async function openMacrosOnlyModal() {
-    if (panel.classList.contains("open") && commsMode) {
-      closePanel();
-      await sleep(220);
-    }
+  function openMacrosOnlyModal() {
     openPanel();
     if (selectedKey === CUSTOM_MACRO_KEY || !selectedKey) {
       restoreMacroModalSession();
@@ -6818,31 +6683,24 @@ function injectMacroModal() {
   }
 
   function openPanel() {
-    backdrop.classList.add("open");
-    backdrop.setAttribute("aria-hidden", "false");
+    placeMacroTab();
+    drawer.classList.add("open");
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
-    document.body.style.overflow = "hidden";
+    tab.setAttribute("aria-expanded", "true");
     setCatNavOpen(false);
     setTimeout(() => searchEl.focus(), 80);
   }
 
   function closePanel() {
     saveMacroModalSession();
-    if (commsMode) {
-      unembedNativeChat();
-      const nativeClose = document.getElementById("od2ChatPanelClose");
-      if (nativeClose) nativeClose.click();
-    }
-    backdrop.classList.remove("open");
-    backdrop.setAttribute("aria-hidden", "true");
+    drawer.classList.remove("open");
     panel.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
-    document.body.style.overflow = "";
+    tab.setAttribute("aria-expanded", "false");
   }
 
   window.__mgOpenMacroModal = openMacrosOnlyModal;
-  window.__mgOpenCommsModal = openCommsModal;
   window.__mgCloseMacroModal = closePanel;
 
   tab.addEventListener("click", () => {
@@ -7018,34 +6876,14 @@ function injectMacroModal() {
   }
 }
 
-function injectChatFabHijack() {
-  const fab = document.getElementById("od2ChatFab");
-  if (!fab || fab.dataset.mgHijacked) return;
-  fab.dataset.mgHijacked = "1";
-
-  const onFabActivate = (e) => {
-    if (window.__mgOpeningCommsInternal) return;
-    e.preventDefault();
-    e.stopPropagation();
-    e.stopImmediatePropagation();
-    if (typeof window.__mgOpenCommsModal === "function") window.__mgOpenCommsModal();
-    else injectMacroModal();
-  };
-
-  fab.addEventListener("click", onFabActivate, true);
-  fab.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") onFabActivate(e);
-  }, true);
-}
-
 function _mgEnsureMacro() {
   try {
     if (!document.body) return;
-    if (!document.getElementById("mg-macro-backdrop") || !document.getElementById("mg-macro-panel")) {
+    if (!document.getElementById("mg-macro-drawer") || !document.getElementById("mg-macro-panel")) {
       injectMacroModal();
-      console.log("[MediGuard] Macros modal injected");
+      console.log("[MediGuard] Macros drawer injected");
     }
-    injectChatFabHijack();
+    if (typeof window.__mgPlaceMacroTab === "function") window.__mgPlaceMacroTab();
   } catch (e) {
     console.warn("[MediGuard] Macros inject failed:", e);
   }
@@ -7056,10 +6894,8 @@ window.addEventListener("load", _mgEnsureMacro);
 [300, 800, 1500, 3000, 6000].forEach(ms => setTimeout(_mgEnsureMacro, ms));
 try {
   const _mgMacObs = new MutationObserver(() => {
-    if (!document.getElementById("mg-macro-backdrop") || !document.getElementById("mg-macro-panel")) {
+    if (!document.getElementById("mg-macro-drawer") || !document.getElementById("mg-macro-panel")) {
       _mgEnsureMacro();
-    } else {
-      injectChatFabHijack();
     }
   });
   const _mgMacStartObs = () => {
