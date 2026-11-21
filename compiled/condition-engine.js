@@ -51,7 +51,7 @@
   async function init() {
     if (!chrome?.storage?.local) return;
     const stored = await chrome.storage.local.get(STORAGE_KEY);
-    await applyCondition(stored[STORAGE_KEY] || DEFAULT_CONDITION, { rescan: false });
+    await applyCondition(stored[STORAGE_KEY] || DEFAULT_CONDITION, { rescan: true });
   }
 
   chrome.storage?.onChanged?.addListener((changes, area) => {

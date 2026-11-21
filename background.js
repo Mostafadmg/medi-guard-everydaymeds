@@ -148,16 +148,54 @@ async function findExistingRxTab(returnTabId, returnUrl, windowId) {
   return null;
 }
 
-async function collectScrTabsToClose(windowId, trackedIds, senderTabId, rxTabId) {
-  const toClose = new Set(Array.isArray(trackedIds) ? trackedIds : []);
-  if (senderTabId) toClose.add(senderTabId);
-  const tabs = windowId != null ? await tabsQuery({ windowId }) : await tabsQuery({});
-  for (const tab of tabs) {
-    if (!tab.id || tab.id === rxTabId) continue;
-    if (isScrWorkflowTab(tab.url)) toClose.add(tab.id);
+function isSearchResultsUrl(url) {
+  return /\/nationalcarerecordsservice\/app\/search_results(?:[/?#]|$)/i.test(url || "");
+}
+
+function isKeywordsToolUrl(url) {
+  return /keywords-tool\.html/i.test(url || "");
+}
+
+async function chooseScrTabsToClose(senderTab, rxTabId) {
+  if (!senderTab?.id) return [];
+  const url = senderTab.url || senderTab.pendingUrl || "";
+  if (isSearchResultsUrl(url)) return [senderTab.id];
+
+  const tabs = senderTab.windowId != null
+    ? await tabsQuery({ windowId: senderTab.windowId })
+    : await tabsQuery({});
+  const ordered = tabs
+    .filter((tab) => tab.id && tab.id !== rxTabId)
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+
+  if (isKeywordsToolUrl(url)) {
+    const ids = [senderTab.id];
+    const index = ordered.findIndex((tab) => tab.id === senderTab.id);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const candidate = ordered[i];
+      if (!candidate?.id || candidate.id === rxTabId) continue;
+      if (isScrWorkflowTab(candidate.url) && !isKeywordsToolUrl(candidate.url)) {
+        ids.push(candidate.id);
+        break;
+      }
+    }
+    if (ids.length < 2) {
+      const previous = [...ordered].reverse().find((tab) =>
+        tab.id !== senderTab.id
+        && tab.id !== rxTabId
+        && isScrWorkflowTab(tab.url)
+        && !isKeywordsToolUrl(tab.url)
+      );
+      if (previous?.id) ids.push(previous.id);
+    }
+    return ids;
   }
-  if (rxTabId) toClose.delete(rxTabId);
-  return [...toClose];
+
+  const workflow = ordered.filter((tab) => isScrWorkflowTab(tab.url));
+  if (workflow.length <= 1) return [senderTab.id];
+  const lastTwo = workflow.slice(-2).map((tab) => tab.id);
+  if (!lastTwo.includes(senderTab.id)) lastTwo.push(senderTab.id);
+  return [...new Set(lastTwo)];
 }
 
 async function getScrSession() {
@@ -243,7 +281,6 @@ async function closeScrAndReturn(senderTabId) {
   let windowId = session?.windowId ?? senderTab?.windowId ?? null;
   const returnTabId = session?.returnTabId ?? null;
   const returnUrl = session?.returnUrl ?? null;
-  const tracked = session?.openedTabIds ?? [];
 
   const rxTabId = await findExistingRxTab(returnTabId, returnUrl, windowId);
   if (session) await setScrSession(null);
@@ -257,7 +294,9 @@ async function closeScrAndReturn(senderTabId) {
     }
   }
 
-  const idsToRemove = await collectScrTabsToClose(windowId, tracked, senderTabId, rxTabId);
+  const idsToRemove = (await chooseScrTabsToClose(senderTab, rxTabId))
+    .filter((id) => id && id !== rxTabId);
+  if (keywordToolTabId && idsToRemove.includes(keywordToolTabId)) keywordToolTabId = null;
   await tabsRemove(idsToRemove);
 
   return { success: true, activatedTabId: rxTabId || null, closedCount: idsToRemove.length };
@@ -300,6 +339,12 @@ function buildWebSearchQueries(context, userMessage) {
   }
 
   const topicQueries = [];
+  const trackingIds = [...new Set(
+    [...`${msg}\n${ctx}`.matchAll(/\b([A-Z]{2}\d{9}[A-Z]{2})\b/gi)].map((match) => match[1].toUpperCase())
+  )];
+  if (trackingIds.length && /not receiv|not arrived|where is my|tracking|royal mail|haven't got|have not got/i.test(combined)) {
+    queries.unshift(`Royal Mail tracking ${trackingIds[0]} delivery status`);
+  }
   if (/treatment gap|supply check|another provider|last injection|switched provider/i.test(combined)) {
     topicQueries.push("GLP-1 weight loss treatment gap another provider UK prescribing continuity");
   }
@@ -340,7 +385,7 @@ function buildWebSearchQueries(context, userMessage) {
   return queries
     .map((q) => q.trim())
     .filter((q) => q.length >= 8 && !seen.has(q.toLowerCase()) && seen.add(q.toLowerCase()))
-    .slice(0, 3);
+    .slice(0, 4);
 }
 
 async function searchWebOnce(query, tavilyKey) {
@@ -405,6 +450,134 @@ async function searchWebForAi(queries, tavilyKey) {
   return blocks.join("\n\n");
 }
 
+function deliveryComplaint(text) {
+  return /not receiv|haven'?t receiv|has not receiv|didn'?t receiv|did not receiv|not arrived|hasn'?t arrived|never arrived|where is my (order|parcel|item|delivery)|missing parcel|not been delivered|have not got|haven't got|not got (it|my|the)|has not received the order/i.test(text || "");
+}
+
+function extractTrackingIds(text) {
+  const ids = [];
+  const seen = new Set();
+  const add = (value) => {
+    const id = String(value || "").toUpperCase();
+    if (!/\d{6,}/.test(id)) return;
+    if (!/^[A-Z0-9]{11,22}$/.test(id)) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  const source = String(text || "");
+  for (const match of source.matchAll(/\b([A-Z]{2}\d{9}[A-Z]{2})\b/gi)) add(match[1]);
+  for (const match of source.matchAll(/tracking-results\/([A-Z0-9]{10,24})/gi)) add(match[1]);
+  for (const match of source.matchAll(/trackNumber=([A-Z0-9]{10,24})/gi)) add(match[1]);
+  return ids.slice(0, 2);
+}
+
+function trackingPageUrl(id) {
+  if (/^(EA|EB|EC|ED|EE|CP)/.test(id)) {
+    return `https://www.parcelforce.com/track-trace?trackNumber=${encodeURIComponent(id)}`;
+  }
+  return `https://www.royalmail.com/track-your-item#/tracking-results/${encodeURIComponent(id)}`;
+}
+
+const trackingStatusCache = new Map();
+const trackingStatusInflight = new Map();
+
+function waitForTab(tabId, ms) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      try { chrome.tabs.onUpdated.removeListener(onUpdated); } catch (_) {}
+      resolve();
+    }, ms);
+    function onUpdated(updatedId, info) {
+      if (updatedId === tabId && info.status === "complete") {
+        clearTimeout(timer);
+        try { chrome.tabs.onUpdated.removeListener(onUpdated); } catch (_) {}
+        resolve();
+      }
+    }
+    try { chrome.tabs.onUpdated.addListener(onUpdated); } catch (_) { resolve(); }
+  });
+}
+
+async function readTrackingPage(id) {
+  const tab = await chrome.tabs.create({ url: trackingPageUrl(id), active: false });
+  try {
+    await waitForTab(tab.id, 9000);
+    await new Promise((r) => setTimeout(r, 4000));
+    const injected = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => (document.body && (document.body.innerText || "")).slice(0, 4000),
+    });
+    const first = Array.isArray(injected) ? injected[0] : null;
+    return String(first && first.result || "").replace(/[ \t]+\n/g, "\n").trim();
+  } finally {
+    try { await chrome.tabs.remove(tab.id); } catch (_) {}
+  }
+}
+
+function trackingLineFromPage(id, page) {
+  const flat = String(page || "").replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  const patterns = [
+    /delivered[^.]{0,90}/i,
+    /delivery attempted[^.]{0,90}/i,
+    /out for delivery[^.]{0,70}/i,
+    /we(?:'re| are) expecting it[^.]{0,90}/i,
+    /we have your item[^.]{0,90}/i,
+    /ready for collection[^.]{0,90}/i,
+    /returned to sender[^.]{0,80}/i,
+    /sorry, we (?:can't|cannot|could not) find[^.]{0,90}/i,
+    /item (?:was )?not found[^.]{0,50}/i,
+  ];
+  const hit = patterns.map((re) => flat.match(re)).find(Boolean);
+  if (!hit) return "";
+  return `Tracking ${id} — text read from the courier tracking page. Status: ${hit[0].trim()}. Page text: ${flat.slice(0, 700)}`;
+}
+
+async function lookupOneTracking(id) {
+  const cached = trackingStatusCache.get(id);
+  if (cached && Date.now() - cached.at < 10 * 60 * 1000) return cached.text;
+  if (trackingStatusInflight.has(id)) return trackingStatusInflight.get(id);
+  const job = (async () => {
+    let line = "";
+    try {
+      line = trackingLineFromPage(id, await readTrackingPage(id));
+    } catch (_) {
+      line = "";
+    }
+    if (!line) {
+      try {
+        const { tavilyKey } = await getAiSettingsFromStorage();
+        const search = await searchWebOnce(`Royal Mail tracking status ${id}`, tavilyKey);
+        if (search) {
+          line = `Tracking ${id} — web search. Use this only if it is clearly about this number:\n${search.slice(0, 800)}`;
+        }
+      } catch (_) {}
+    }
+    if (!line) {
+      line = `Tracking ${id} — the number is in the patient's messages. A live Royal Mail status could not be read. Give the patient this number and the Royal Mail link from the messages. Do not say the parcel was delivered or delayed.`;
+    }
+    trackingStatusCache.set(id, { at: Date.now(), text: line });
+    return line;
+  })();
+  trackingStatusInflight.set(id, job);
+  try {
+    return await job;
+  } finally {
+    trackingStatusInflight.delete(id);
+  }
+}
+
+async function withTrackingLookup(context) {
+  const text = String(context || "");
+  if (!deliveryComplaint(text)) return text;
+  const ids = extractTrackingIds(text);
+  if (!ids.length) return text;
+  const blocks = [];
+  for (const id of ids) blocks.push(await lookupOneTracking(id));
+  return `${text}\n\n=== TRACKING LOOKUP ===\n${blocks.join("\n\n")}`;
+}
+
 function buildEmailSystemPrompt(context, webResults) {
   let sys = `You are an expert UK clinical prescriber assistant for EverydayMeds, an online GLP-1 weight loss pharmacy (Mounjaro/tirzepatide, Wegovy/semaglutide, etc.).
 
@@ -424,16 +597,29 @@ PRIMARY RULE — FOLLOW THE PRESCRIBER:
 
 ACCURACY & ANTI-HALLUCINATION (CRITICAL):
 - Ground every statement in order context, consultation answers, attachments, or web search results.
-- NEVER invent dates, doses, order numbers, diagnoses, side effects, or patient statements.
-- NEVER claim you reviewed SCR, documents, or chat unless that data is in context or attachments.
+- NEVER invent dates, doses, order numbers, diagnoses, side effects, tracking numbers, or patient statements.
+- NEVER claim you reviewed SCR, documents, photos, or chat unless that data is in context or attachments.
+- The FULL ORDER RECORD is copied from the live page: clinical, consultation, documents, order history, monitoring, notes, activity, and communications on this order and earlier orders.
+- If a fact is not written there, it is unknown. Ask the patient. Do not fill the gap.
+- Only mention a patient question (tracking, delay, side effect, another provider, wrong item) when that question is written in the communications, notes, or monitoring.
+- If the record has no open question, do not invent one. Follow the prescriber's instruction and nothing else.
+- Mention an ID or weight photo only when the context says the photo was readable and disagreed with the name or weight on the order.
 - If information is missing, ask specific questions — do not assume.
 - Prefer precise, cautious clinical language over vague reassurance.
 - When web results conflict with order context, trust order context for this patient; use web only for general UK clinical facts.
 
+DELIVERY AND TRACKING:
+- If the record says the patient has not received the order, or is asking where it is, the message must answer that.
+- If a tracking number or a Royal Mail / Parcelforce link is written in the record, include that exact number and that exact link. Never invent a different number or a different link.
+- This tracking link is the one URL you include even when the prescriber did not ask for a URL.
+- If TRACKING LOOKUP gives a status for that number, tell the patient that status in plain words. Use only a status written there.
+- If TRACKING LOOKUP says the live status could not be read, still give the number and the link. Do not say the parcel was delivered, delayed, lost, or still in transit.
+
 WEB SEARCH (when provided):
 - Use web results for up-to-date UK NHS/NICE/SmPC facts: dosing, missed doses, side effects, contraindications, monitoring.
+- When web search is available, check a clinical claim against NICE, the BNF, NHS, or the SmPC before you state it. If you could not verify it, do not state it as fact.
 - Do not copy web text verbatim — synthesise into plain patient-friendly language.
-- Do not cite URLs in the patient message unless the prescriber asks.
+- Do not cite URLs in the patient message unless the prescriber asks, except a Royal Mail or Parcelforce tracking link that is already written in the messages when the patient has not received the order.
 
 REFINEMENT (multi-turn):
 - Follow-up notes ("shorter", "add order on hold", "mention February order") → revise the previous draft.
@@ -487,32 +673,154 @@ function buildUserMessageContent(userMessage, attachments, isRefine) {
   return parts.length === 1 ? text : parts;
 }
 
-async function callOpenAiEmail(messages, openaiKey) {
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
+const AI_MODEL = "gpt-6.2-astra";
+const AI_MODEL_FALLBACK = "gpt-4o";
+const CLINICAL_SEARCH_DOMAINS = [
+  "nice.org.uk",
+  "nhs.uk",
+  "medicines.org.uk",
+  "gov.uk",
+  "sps.nhs.uk",
+  "mhra.gov.uk",
+  "bnf.org",
+  "rcgp.org.uk",
+];
+
+function messagesToResponseInput(messages) {
+  const instructions = [];
+  const input = [];
+  for (const message of messages || []) {
+    const role = message?.role;
+    const content = message?.content;
+    if (role === "system") {
+      instructions.push(typeof content === "string" ? content : JSON.stringify(content || ""));
+      continue;
+    }
+    const outRole = role === "assistant" ? "assistant" : "user";
+    if (typeof content === "string" || content == null) {
+      input.push({ role: outRole, content: String(content || "") });
+      continue;
+    }
+    if (Array.isArray(content)) {
+      const parts = [];
+      for (const part of content) {
+        if (part?.type === "text" && part.text) parts.push({ type: "input_text", text: String(part.text) });
+        else if (part?.type === "image_url") {
+          const url = part.image_url?.url || part.image_url;
+          if (url) parts.push({ type: "input_image", image_url: String(url) });
+        }
+      }
+      input.push({ role: outRole, content: parts.length ? parts : "" });
+    }
+  }
+  return { instructions: instructions.join("\n\n"), input };
+}
+
+function extractResponseText(payload) {
+  if (payload?.output_text) return String(payload.output_text).trim();
+  const chunks = [];
+  for (const item of payload?.output || []) {
+    if (item?.type !== "message") continue;
+    for (const part of item.content || []) {
+      if (part?.text) chunks.push(String(part.text));
+    }
+  }
+  return chunks.join("\n").trim();
+}
+
+async function readOpenAiError(response) {
+  let msg = `OpenAI error (${response.status})`;
+  try {
+    const err = await response.json();
+    if (err?.error?.message) msg = err.error.message;
+  } catch (_) {}
+  return msg;
+}
+
+async function callOpenAiResponses(messages, openaiKey, options) {
+  const opts = options || {};
+  const { instructions, input } = messagesToResponseInput(messages);
+  const body = {
+    model: AI_MODEL,
+    instructions: instructions || "Follow the user's request.",
+    input: input.length ? input : "",
+    max_output_tokens: opts.maxTokens || 1600,
+    reasoning: { effort: opts.reasoning || "low" },
+  };
+  if (opts.webSearch) {
+    const tool = {
+      type: "web_search",
+      search_context_size: "high",
+      user_location: { type: "approximate", approximate: { country: "GB" } },
+    };
+    if (Array.isArray(opts.searchDomains) && opts.searchDomains.length) {
+      tool.filters = { allowed_domains: opts.searchDomains };
+    }
+    body.tools = [tool];
+    body.tool_choice = "auto";
+  }
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${openaiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error(await readOpenAiError(response));
+  const payload = await response.json();
+  const text = extractResponseText(payload);
+  if (!text) throw new Error("OpenAI returned an empty response.");
+  return text;
+}
+
+async function callOpenAiChatCompletions(messages, openaiKey, options) {
+  const opts = options || {};
+  let outgoing = messages;
+  if (opts.webSearch) {
+    try {
+      const { tavilyKey } = await getAiSettingsFromStorage();
+      const lastUser = [...messages].reverse().find((message) => message?.role === "user");
+      const question = typeof lastUser?.content === "string" ? lastUser.content : "";
+      const queries = buildWebSearchQueries("", question).slice(0, 2);
+      const web = queries.length ? await searchWebForAi(queries, tavilyKey) : "";
+      if (web) {
+        outgoing = messages.slice();
+        outgoing.splice(1, 0, {
+          role: "system",
+          content: "Web search results. For clinical facts, prefer NICE, NHS, the BNF, and the SmPC. Do not treat forums or news as guidance.\n" + web,
+        });
+      }
+    } catch (_) {}
+  }
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${openaiKey}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o",
-      messages,
-      max_tokens: 2400,
-      temperature: 0.2,
+      model: AI_MODEL_FALLBACK,
+      messages: outgoing,
+      max_tokens: opts.maxTokens || 2400,
+      temperature: opts.temperature != null ? opts.temperature : 0.2,
     }),
   });
-  if (!r.ok) {
-    let msg = `OpenAI error (${r.status})`;
-    try {
-      const err = await r.json();
-      if (err?.error?.message) msg = err.error.message;
-    } catch (_) {}
-    throw new Error(msg);
-  }
-  const j = await r.json();
-  const text = j.choices?.[0]?.message?.content;
+  if (!response.ok) throw new Error(await readOpenAiError(response));
+  const payload = await response.json();
+  const text = payload.choices?.[0]?.message?.content;
   if (!text) throw new Error("OpenAI returned an empty response.");
   return text;
+}
+
+async function callOpenAiEmail(messages, openaiKey, options) {
+  try {
+    return await callOpenAiResponses(messages, openaiKey, options);
+  } catch (error) {
+    const msg = String(error?.message || "");
+    if (/401|403|incorrect api key|invalid_api_key|insufficient_quota/i.test(msg)) throw error;
+    return callOpenAiChatCompletions(messages, openaiKey, options);
+  }
 }
 
 async function callServerEmail(messages, serverUrl) {
@@ -533,7 +841,7 @@ async function generatePatientEmail(payload) {
   const history = Array.isArray(payload?.history) ? payload.history : [];
   const attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
   const webSearch = !!payload?.webSearch;
-  const context = payload?.context || "";
+  let context = payload?.context || "";
 
   if (!userMessage && !attachments.length) {
     throw new Error("Describe the scenario or attach a file first.");
@@ -543,6 +851,8 @@ async function generatePatientEmail(payload) {
   if (!openaiKey && !serverUrl) {
     throw new Error("Add your OpenAI API key in extension Settings → Save, then try again.");
   }
+
+  context = await withTrackingLookup(context);
 
   let webResults = "";
   if (webSearch) {
@@ -569,7 +879,14 @@ async function generatePatientEmail(payload) {
 
   if (openaiKey) {
     try {
-      return stripEmailSubject(await callOpenAiEmail(messages, openaiKey));
+      const clinical = /dose|side effect|nice|smpc|bnf|eligib|contraindic|pregnan|pancreat|thyroid|missed|storage|mounjaro|wegovy|semaglutide|tirzepatide|bmi|nausea|guideline|interaction|sick day|gallbladder/i.test(userMessage);
+      const tracking = /track|royal mail|parcel|not receiv|deliver/i.test(`${userMessage}\n${context}`);
+      return stripEmailSubject(await callOpenAiEmail(messages, openaiKey, {
+        maxTokens: 2400,
+        reasoning: "low",
+        webSearch,
+        searchDomains: webSearch && clinical && !tracking ? CLINICAL_SEARCH_DOMAINS : null,
+      }));
     } catch (e) {
       const msg = e?.message || "OpenAI request failed.";
       if (/failed to fetch|networkerror/i.test(msg)) {
@@ -592,6 +909,239 @@ async function generatePatientEmail(payload) {
     }
     throw new Error(msg);
   }
+}
+
+function normaliseBriefPoint(p) {
+  if (p && typeof p === "object") {
+    let order = String(p.order || "").trim();
+    if (order && !/^#/.test(order) && /\d/.test(order)) order = "#" + order.replace(/^#/, "");
+    return {
+      when: String(p.when || "").trim(),
+      order,
+      where: String(p.where || p.source || "").trim(),
+      text: String(p.text || p.fact || "").trim(),
+      said: String(p.said || p.quote || "").trim(),
+    };
+  }
+  return { when: "", order: "", where: "", text: String(p || "").trim(), said: "" };
+}
+
+function parseOrderBrief(text) {
+  const raw = String(text || "").trim();
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    try {
+      const obj = JSON.parse(raw.slice(start, end + 1));
+      const points = Array.isArray(obj.points)
+        ? obj.points.map(normaliseBriefPoint).filter((p) => p.text || p.said).slice(0, 5)
+        : [];
+      return { relevant: !!obj.relevant && points.length > 0, points };
+    } catch (_) {}
+  }
+  return { relevant: false, points: [] };
+}
+
+function buildOrderBriefSystemPrompt() {
+  return `You brief a UK EverydayMeds prescriber before they reply to a patient. You do not write the patient message and you do not approve or reject the order.
+
+You are given text copied from this order's tabs (clinical, consultation, documents, history, monitoring, notes, activity) and from the patient's messages on this order and earlier orders. Any images are ID/weight photos or still frames captured from patient-uploaded videos on the documents tab.
+
+Rules:
+- Use only facts written in the text, or text you can actually read in a photo.
+- Never invent a date, dose, tracking number, side effect, name, order number, or message.
+- Never say a photo matches or does not match unless the name or weight is readable.
+- If a photo is blurry or unreadable, ignore it.
+- Set relevant to true only when one of these is present: the patient asked a question, requested something, said they expect something (a photo, a higher dose, a refund, a cancellation, a delivery), reported a problem (tracking, delay, not received, side effect, wrong item, dose, another provider), a prescriber note flags something that changes the reply, or a readable photo disagrees with the patient name or the recorded weight.
+- Read the consultation answers, not only the message thread. If they ticked or typed a request or a question, that is relevant. said must be their wording.
+- A patient saying the order was not received, has not arrived, or asking where it is IS relevant, even when a staff message already contains a tracking link. A routine "your order has been dispatched" with no complaint is not relevant.
+- When a DELIVERY AND TRACKING section is present and it says the patient has not received the order, the first point must be that issue. text is "Not received" plus the tracking number when one is written. said is the patient's own sentence from "Patient wording". If TRACKING LOOKUP gives a status, add that status to text. If it says the status could not be read, do not invent one.
+- Routine order updates with no question are not relevant.
+- If nothing meets that bar, return {"relevant":false,"points":[]}
+- If something does, return JSON with at most 5 points. Each point is an object:
+  {"relevant":true,"points":[{"when":"18 Nov 2026, 12:19","order":"#27065","where":"Consultation","text":"Side effects","said":"Nausea & vomiting, constipation, dizziness, hair loss, changes in taste."}]}
+- when: the date and the clock time written next to that fact, for example "18 Nov 2026, 12:19". Use a "Submitted" time, a message time, or a note time when one is written. If only a date is written, use the date. If no time is written, do not invent one.
+- order: the order number that fact belongs to, with a #. Use the current order number when the fact is on the order open now. If no order number is written, use "".
+- where: one of Consultation, Messages, Notes, Monitoring, Documents, History, Activity, Clinical.
+- text: a short label of the topic only, such as "Side effects" or "Tracking". Do not put the patient's words here.
+- said: what the patient wrote or ticked, in their wording. Copy the answer, the comment, or the message. A tick-list is the options they chose, as written on the page. A typed comment is that comment. You may shorten a long comment, but do not rewrite it as "Patient reported". Do not add anything they did not write.
+- No advice to approve or reject. No drafted reply.
+Return JSON only.`;
+}
+
+async function summariseOrderContext(payload) {
+  let context = String(payload?.context || "").trim();
+  const attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
+  if (!context && !attachments.length) return { relevant: false, points: [] };
+
+  const { openaiKey, serverUrl } = await getAiSettingsFromStorage();
+  if (!openaiKey && !serverUrl) {
+    throw new Error("Add your OpenAI API key in extension Settings → Save, then try again.");
+  }
+  context = await withTrackingLookup(context);
+
+  let text = "Read this order record. Return JSON only.\n";
+  const orderNo = String(payload?.orderNo || "").replace(/^#/, "").trim();
+  const orderDate = String(payload?.orderDate || "").trim();
+  if (orderNo || orderDate) {
+    text += `Current order on screen: ${orderNo ? "#" + orderNo : "unknown number"}`;
+    if (orderDate) text += `, dated ${orderDate}`;
+    text += ". Facts on this page belong to this order unless the text names a different order.\n";
+  }
+  text += "\n" + (context || "(no page text)");
+  const parts = [{ type: "text", text }];
+  let images = 0;
+  for (const att of attachments) {
+    if (images >= 6) break;
+    if (att?.kind === "image" && att.dataUrl) {
+      parts.push({ type: "text", text: `Photo or video frame from the documents tab: ${att.name || "document"}` });
+      parts.push({ type: "image_url", image_url: { url: att.dataUrl, detail: "high" } });
+      images += 1;
+    }
+  }
+  const userContent = parts.length === 1 ? text : parts;
+  const messages = [
+    { role: "system", content: buildOrderBriefSystemPrompt() },
+    { role: "user", content: userContent },
+  ];
+
+  let raw = "";
+  if (openaiKey) {
+    raw = await callOpenAiEmail(messages, openaiKey, { temperature: 0, maxTokens: 1800, reasoning: "low" });
+  } else {
+    const plain = messages.map((m) => ({
+      role: m.role,
+      content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+    }));
+    raw = await callServerEmail(plain, serverUrl);
+  }
+  return parseOrderBrief(raw);
+}
+
+function buildOrderOverviewPrompt() {
+  return `You brief the prescriber about one EverydayMeds order. You are not writing to the patient, and you do not approve or reject.
+
+Use only the order record. Never invent an SCR result, a date, a time, a dose, a weight, or something the patient said.
+
+Write a short summary in plain sentences, with these headings only when the record has something for them:
+Order — number, date and time, medicine, dose, quantity.
+Patient — age, BMI, height, weight, if written.
+SCR — exactly what is logged (for example accessed, no record, consent). If the record does not mention SCR, write "SCR: not on this page."
+What they said — important consultation answers or messages in the patient's own wording, with the date and time when one is written.
+Delivery — if the record says the order was not received, include the tracking number, the tracking link, and the Royal Mail status from TRACKING LOOKUP. If no live status was read, say the status could not be read. Do not invent one.
+Documents — verified, missing, or rejected.
+History and monitoring — earlier orders, weight change, side effects they reported.
+Notes — prescriber notes that still matter.
+
+Skip a heading when the record is silent on it. No patient letter.`;
+}
+
+async function summariseOrderOverview(payload) {
+  let context = String(payload?.context || "").trim();
+  if (!context) throw new Error("This order's tabs were not on the page.");
+  const { openaiKey, serverUrl } = await getAiSettingsFromStorage();
+  if (!openaiKey && !serverUrl) {
+    throw new Error("Add your OpenAI API key in extension Settings → Save, then try again.");
+  }
+  context = await withTrackingLookup(context);
+  const orderNo = String(payload?.orderNo || "").replace(/^#/, "").trim();
+  const orderDate = String(payload?.orderDate || "").trim();
+  let user = "Summarise this order for the prescriber.\n";
+  if (orderNo || orderDate) {
+    user += `Current order: ${orderNo ? "#" + orderNo : "unknown number"}`;
+    if (orderDate) user += `, ${orderDate}`;
+    user += ".\n";
+  }
+  user += "\n" + context.slice(0, 16000);
+  const messages = [
+    { role: "system", content: buildOrderOverviewPrompt() },
+    { role: "user", content: user },
+  ];
+  if (openaiKey) return (await callOpenAiEmail(messages, openaiKey, { temperature: 0, maxTokens: 1800, reasoning: "low" })).trim();
+  const plain = messages.map((m) => ({ role: m.role, content: m.content }));
+  return (await callServerEmail(plain, serverUrl)).trim();
+}
+
+function buildOrderAskPrompt(overview) {
+  let sys = `You are the prescriber's clinical assistant for this one EverydayMeds order. You are chatting with the prescriber, not with the patient.
+
+This is a continuing conversation. Earlier turns are their questions and your answers. Use them. Do not drop a fact already established in this chat, and do not answer as if this is the first message.
+
+Read the consultation answers and the messages. Notice when the patient asks a question, requests something, or expects something. Say that in their wording. A request for a higher dose, a refund, a cancellation, a delay, a different pen, or a photo they say they will upload is a request, not a vague update.
+
+Facts about this patient come only from the order record, attached photos/video frames from the documents tab, and this chat. If an order summary is included, the record wins if they differ. Never invent a date, time, dose, SCR result, tracking number, or something the patient did not write. If it is not in the record or readable in an attachment, say it is not on the order.
+
+When images are attached, treat them as documents-tab photos or still frames from patient-uploaded videos (ID, weight/scale, selfies, packaging). Read visible text, names, weights, and what the video frames show. If a frame is blurry or unreadable, say so — do not guess.
+
+Clinical facts that are not about this patient's own words (a dose rule, a side effect, eligibility, a missed dose, storage, a contraindication) must be checked with web search against NICE, the BNF, NHS, or the SmPC on medicines.org.uk. Prefer those sources. If you could not verify a clinical point, say so. Do not invent a guideline.
+
+If they ask where the parcel is, use the tracking number and link from the record. Use a delivery status only when TRACKING LOOKUP states it. If the lookup says it could not be read, say that, and still give the number and the link.
+When they ask what the patient said, quote the patient's wording and include the date and time if it is written.
+If they ask you to write the patient message, write the full draft and start it with "Draft only — nothing is sent."
+Keep the answer short enough to read while working.`;
+  if (overview) sys += `\n\nOrder summary already prepared:\n${overview}`;
+  return sys;
+}
+
+function buildAskUserContent(question, attachments) {
+  let text = String(question || "").trim() || "Review the attached order documents and video frames.";
+  const parts = [];
+  let images = 0;
+  for (const att of attachments || []) {
+    if (att?.kind === "image" && att.dataUrl && images < 8) {
+      parts.push({ type: "text", text: `Document/video frame from the order: ${att.name || "document"}` });
+      parts.push({ type: "image_url", image_url: { url: att.dataUrl, detail: "high" } });
+      images += 1;
+    } else if (att?.kind === "text" && att.text) {
+      text += `\n\n[Attached file: ${att.name || "file"}]\n${String(att.text).slice(0, 12000)}`;
+    }
+  }
+  parts.unshift({ type: "text", text });
+  return parts.length === 1 ? text : parts;
+}
+
+async function askAboutOrder(payload) {
+  const question = String(payload?.question || "").trim();
+  const attachments = Array.isArray(payload?.attachments) ? payload.attachments : [];
+  if (!question && !attachments.length) throw new Error("Type a question about this order.");
+  let context = String(payload?.context || "").trim();
+  const overview = String(payload?.overview || "").trim();
+  const history = Array.isArray(payload?.history) ? payload.history : [];
+  const { openaiKey, serverUrl } = await getAiSettingsFromStorage();
+  if (!openaiKey && !serverUrl) {
+    throw new Error("Add your OpenAI API key in extension Settings → Save, then try again.");
+  }
+  context = await withTrackingLookup(context);
+  const messages = [{ role: "system", content: buildOrderAskPrompt(overview) }];
+  if (context) {
+    messages.push({
+      role: "system",
+      content: "Order record:\n" + context.slice(0, 14000),
+    });
+  }
+  for (const turn of history.slice(-20)) {
+    if (turn?.role === "user" || turn?.role === "assistant") {
+      messages.push({ role: turn.role, content: String(turn.content || "").slice(0, 6000) });
+    }
+  }
+  messages.push({ role: "user", content: buildAskUserContent(question, attachments) });
+  const blob = `${question}\n${history.map((turn) => turn?.content || "").join("\n")}`;
+  const clinical = /dose|side effect|nice|smpc|bnf|eligib|contraindic|pregnan|pancreat|thyroid|missed|storage|mounjaro|wegovy|semaglutide|tirzepatide|bmi|nausea|guideline|interaction|sick day|gallbladder|clinical|document|video|photo|id|weight|scale/i.test(blob);
+  const tracking = /track|royal mail|parcel|not receiv|deliver/i.test(blob);
+  if (openaiKey) {
+    return (await callOpenAiEmail(messages, openaiKey, {
+      temperature: 0.2,
+      maxTokens: 1600,
+      reasoning: "medium",
+      webSearch: payload?.webSearch !== false,
+      searchDomains: clinical && !tracking ? CLINICAL_SEARCH_DOMAINS : null,
+    })).trim();
+  }
+  const plain = messages.map((m) => ({
+    role: m.role,
+    content: typeof m.content === "string" ? m.content : JSON.stringify(m.content),
+  }));
+  return (await callServerEmail(plain, serverUrl)).trim();
 }
 
 const PARALLEL_POOL_KEY = "clinical_parallel_pool";
@@ -680,7 +1230,7 @@ async function startParallelClinicalPool(message, sender) {
   if (!urls.length) return { success: false, error: "No orders to process" };
   let workerCount = parseInt(message.workerCount, 10);
   if (!Number.isFinite(workerCount)) workerCount = 3;
-  workerCount = Math.max(2, Math.min(6, workerCount));
+  workerCount = Math.max(2, Math.min(20, workerCount));
   const queueUrl = message.queueUrl || "https://rx.everydaymeds.co.uk/pending-orders-new?tab=rx_approved";
   const scrMode = message.scrMode === "accessed" ? "accessed" : "not_accessed";
 
@@ -694,7 +1244,7 @@ async function startParallelClinicalPool(message, sender) {
     queueUrl,
     workerTabIds: [tabId],
     lastError: null,
-    stopOnError: message.stopOnError !== false,
+    stopOnError: message.stopOnError === true,
   };
   await saveParallelPool(pool);
   broadcastParallelPool(pool, "started");
@@ -1363,6 +1913,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (
+    message.type === "ORDER_URL_CHANGED" ||
     message.type === "ORDER_DATA_SCANNED" ||
     message.type === "TAB_COMPLETION_CHANGED" ||
     message.type === "ACTIVE_TAB_CHANGED" ||
@@ -1405,7 +1956,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === "SCR_CLOSE_AND_RETURN") {
+  if (message.type === "SCR_CLOSE_AND_RETURN" || message.action === "closeScrAndReturn") {
     closeScrAndReturn(sender.tab && sender.tab.id)
       .then(sendResponse)
       .catch((e) => sendResponse({ success: false, error: e && e.message }));
@@ -1416,6 +1967,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     generatePatientEmail(message)
       .then((text) => sendResponse({ success: true, text }))
       .catch((e) => sendResponse({ success: false, error: e?.message || "Generation failed" }));
+    return true;
+  }
+
+  if (message.type === "SUMMARISE_ORDER_CONTEXT") {
+    summariseOrderContext(message)
+      .then((brief) => sendResponse({ success: true, brief }))
+      .catch((e) => sendResponse({ success: false, error: e?.message || "Could not read the order" }));
+    return true;
+  }
+
+  if (message.type === "SUMMARISE_ORDER_OVERVIEW") {
+    summariseOrderOverview(message)
+      .then((text) => sendResponse({ success: true, text }))
+      .catch((e) => sendResponse({ success: false, error: e?.message || "Could not summarise the order" }));
+    return true;
+  }
+
+  if (message.type === "ASK_ABOUT_ORDER") {
+    askAboutOrder(message)
+      .then((text) => sendResponse({ success: true, text }))
+      .catch((e) => sendResponse({ success: false, error: e?.message || "Could not answer" }));
     return true;
   }
 

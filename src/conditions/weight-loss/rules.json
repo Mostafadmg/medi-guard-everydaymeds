@@ -1231,6 +1231,8 @@
       "screening for cancer",
       "intraepithelial neoplasia",
       "benign neoplasm",
+      "neoplasm screening",
+      "breast neoplasm screening",
       "benign tumour",
       "medullary thyroid cancer",
       "medullary thyroid carcinoma"
@@ -2216,6 +2218,12 @@
       "AKI",
       "acute renal failure",
       "severe dehydration"
+    ],
+    "exclude_phrases": [
+      "aki staging not applicable",
+      "aki stage na",
+      "aki stage n/a",
+      "no flag alert"
     ],
     "structured": true,
     "match": "whole_word",

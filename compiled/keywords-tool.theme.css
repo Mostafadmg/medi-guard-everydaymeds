@@ -1225,6 +1225,12 @@ body {
   font-size: 0.6875rem !important;
 }
 
+#root mark.edm-finding-mark-active {
+  outline: 2px solid #dc2626;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2);
+}
+
 #root tr.edm-finding-row-active {
   background: #fee2e2 !important;
   box-shadow: inset 0 0 0 2px #ef4444;

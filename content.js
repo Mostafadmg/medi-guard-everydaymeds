@@ -2091,6 +2091,503 @@ function ensureInlinePatientCardObserver() {
 
 // ── Initial scan ──────────────────────────────────────────────────────────
 
+function mgCleanBlock(text, max) {
+  let s = String(text || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (max && s.length > max) s = s.slice(0, max - 1) + "…";
+  return s;
+}
+
+function collectOrderTabText() {
+  const chunks = [];
+  document.querySelectorAll(".od2-tab-panel[data-panel]").forEach((panel) => {
+    const name = panel.getAttribute("data-panel") || "tab";
+    const text = mgCleanBlock(panel.textContent, 3200);
+    if (text.length < 20) return;
+    chunks.push(`=== ${name.toUpperCase()} TAB ===\n${text}`);
+  });
+  return chunks.join("\n\n");
+}
+
+function mgNodeOwnText(el) {
+  if (!el) return "";
+  return [...el.childNodes]
+    .filter((n) => n.nodeType === 3)
+    .map((n) => n.textContent)
+    .join("")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function mgPageTrackingLinks() {
+  const links = [];
+  document.querySelectorAll("a[href]").forEach((a) => {
+    const href = a.href || "";
+    if (/royalmail\.com\/track|parcelforce\.com\/.*track|track-your-item|trackNumber=/i.test(href)) {
+      links.push(href);
+    }
+  });
+  return [...new Set(links)];
+}
+
+function mgFocusComms(text) {
+  const clean = mgCleanBlock(text, 20000);
+  if (clean.length <= 8000) return clean;
+  const idx = clean.search(/not receiv|haven'?t receiv|not arrived|royalmail|track-your-item|trackNumber=/i);
+  if (idx < 0) return clean.slice(0, 8000);
+  return clean.slice(Math.max(0, idx - 1500), Math.max(0, idx - 1500) + 8000);
+}
+
+function mgReadPanelText(el) {
+  if (!el) return "";
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll("textarea, input, script, style, svg, #od2CommsInput").forEach((node) => node.remove());
+  return mgFocusComms(clone.innerText || clone.textContent || "");
+}
+
+function mgBestCommsText() {
+  const candidates = [];
+  const seen = new Set();
+  const push = (el) => {
+    if (!el || seen.has(el) || el === document.body || el === document.documentElement) return;
+    seen.add(el);
+    candidates.push(el);
+  };
+  push(document.getElementById("emRoot"));
+  push(document.getElementById("od2CommsThread"));
+  push(document.getElementById("od2ChatPanel"));
+  document.querySelectorAll("[id*='comms' i], [class*='comms' i], [id*='chat' i], [class*='chat' i]").forEach(push);
+  if (document.body) {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    let node;
+    let scanned = 0;
+    while ((node = walker.nextNode()) && scanned < 5000) {
+      scanned += 1;
+      const own = mgNodeOwnText(node);
+      if (!own || own.length > 48) continue;
+      if (!/^patient communications$/i.test(own) && !/^all communication$/i.test(own)) continue;
+      let parent = node.parentElement;
+      for (let i = 0; i < 8 && parent && parent !== document.body; i++) {
+        const len = (parent.innerText || "").length;
+        if (len > 120 && len < 40000) {
+          push(parent);
+          break;
+        }
+        parent = parent.parentElement;
+      }
+    }
+  }
+  let bestText = "";
+  let bestScore = 0;
+  const links = new Set(mgPageTrackingLinks());
+  candidates.forEach((el) => {
+    const text = mgReadPanelText(el);
+    const ownLinks = [];
+    el.querySelectorAll("a[href]").forEach((a) => {
+      const href = a.href || "";
+      if (/track|royalmail|parcelforce|dpd|evri|dhl/i.test(href)) {
+        links.add(href);
+        ownLinks.push(href);
+      }
+    });
+    let score = text.length;
+    if (/not receiv|haven'?t receiv|not arrived|where is my/i.test(text)) score += 8000;
+    if (/royalmail|track-your-item|parcelforce/i.test(text) || ownLinks.length) score += 8000;
+    if (score > bestScore) {
+      bestScore = score;
+      bestText = text;
+    }
+  });
+  return { text: bestText, links: [...links] };
+}
+
+function mgTrackingIds(blob) {
+  const ids = [];
+  const seen = new Set();
+  const add = (value) => {
+    const id = String(value || "").toUpperCase();
+    if (!/^[A-Z]{2}[A-Z0-9]{8,20}[A-Z]{2}$/.test(id) && !/^[A-Z]{2}\d{9}[A-Z]{2}$/.test(id)) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  const source = String(blob || "");
+  for (const match of source.matchAll(/\b([A-Z]{2}\d{9}[A-Z]{2})\b/gi)) add(match[1]);
+  for (const match of source.matchAll(/tracking-results\/([A-Z0-9]{10,24})/gi)) add(match[1]);
+  for (const match of source.matchAll(/trackNumber=([A-Z0-9]{10,24})/gi)) add(match[1]);
+  return ids;
+}
+
+function mgPatientDeliveryQuote(text) {
+  const skip = /if you have not received|should you not receive|not received this (email|message)|let us know if/i;
+  const re = /not receiv|haven'?t receiv|has not receiv|didn'?t receiv|did not receiv|not arrived|hasn'?t arrived|never arrived|where is my (order|parcel|item|delivery)|missing parcel|not been delivered|have not got|haven't got|not got (it|my|the)/i;
+  const lineHit = String(text || "").split(/\n/).map((line) => line.trim()).find((line) => {
+    if (line.length < 12 || line.length > 500) return false;
+    if (skip.test(line)) return false;
+    return re.test(line);
+  });
+  if (lineHit) return lineHit.slice(0, 320);
+  const flat = String(text || "").replace(/\s+/g, " ");
+  const match = re.exec(flat);
+  if (!match || skip.test(flat.slice(Math.max(0, match.index - 40), match.index + 80))) return "";
+  return flat.slice(Math.max(0, match.index - 80), match.index + 160).trim().slice(0, 320);
+}
+
+function mgTrackingBlock(text, links) {
+  const blob = `${text || ""}\n${(links || []).join("\n")}`;
+  const ids = mgTrackingIds(blob);
+  const uniqueLinks = [...new Set(links || [])].slice(0, 6);
+  const quote = mgPatientDeliveryQuote(text);
+  if (!ids.length && !uniqueLinks.length && !quote) return "";
+  const lines = ["=== DELIVERY AND TRACKING (copied from the page, do not ignore) ==="];
+  if (quote) {
+    lines.push("The messages say the patient has not received the order, or is asking where it is.");
+    lines.push("Patient wording: " + quote);
+  }
+  if (ids.length) lines.push("Tracking numbers: " + ids.join(", "));
+  if (uniqueLinks.length) lines.push("Tracking links:\n" + uniqueLinks.join("\n"));
+  return lines.join("\n");
+}
+
+function mgCommsThreadText() {
+  return mgBestCommsText().text;
+}
+
+async function mgEnsureCommsVisible() {
+  if (document.getElementById("emRoot") || document.querySelector("#emOrderList button.em-ord")) return;
+  if (mgPageTrackingLinks().length) return;
+  if ([...document.querySelectorAll("h1, h2, h3, h4, div, span, p")].some((el) => /^patient communications$/i.test(mgNodeOwnText(el)))) return;
+  const opener = [...document.querySelectorAll("button")].find((btn) => {
+    if (btn.disabled) return false;
+    if ((btn.getAttribute("type") || "").toLowerCase() === "submit") return false;
+    const label = (btn.innerText || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (label !== "message patient" && !label.startsWith("message patient ")) return false;
+    if (/\b(send|approve|reject|dispense)\b/.test(label)) return false;
+    return true;
+  });
+  if (!opener) return;
+  try { opener.click(); } catch (_) { return; }
+  for (let i = 0; i < 12; i++) {
+    await new Promise((r) => setTimeout(r, 150));
+    if (document.getElementById("emRoot") || document.querySelector("#emOrderList button.em-ord")) return;
+  }
+}
+
+function mgSafeCommButtons() {
+  return [...document.querySelectorAll("#emOrderList button.em-ord")].filter((btn) => {
+    if (btn.disabled) return false;
+    const type = (btn.getAttribute("type") || "").toLowerCase();
+    if (type === "submit") return false;
+    const label = (btn.textContent || "").toLowerCase();
+    if (/\b(send|approve|reject|dispense|verify)\b/.test(label)) return false;
+    return true;
+  }).slice(0, 8);
+}
+
+async function readAllOrderCommunications() {
+  try { await mgEnsureCommsVisible(); } catch (_) {}
+  const openThread = mgBestCommsText();
+  const buttons = mgSafeCommButtons();
+  const parts = [];
+  const links = new Set(openThread.links);
+  if (buttons.length) {
+    const previous = buttons.find((b) => b.classList.contains("active")) || null;
+    for (const btn of buttons) {
+      try { btn.click(); } catch (_) { continue; }
+      await new Promise((r) => setTimeout(r, 160));
+      const label = mgCleanBlock(btn.textContent, 180) || "Messages";
+      const snap = mgBestCommsText();
+      snap.links.forEach((href) => links.add(href));
+      if (snap.text) parts.push(`## ${label}\n${snap.text}`);
+    }
+    if (previous) {
+      try { previous.click(); } catch (_) {}
+    }
+  }
+  const merged = [openThread.text, parts.join("\n\n")].filter(Boolean).join("\n\n");
+  const tracking = mgTrackingBlock(merged, [...links]);
+  const text = merged
+    ? ((parts.length
+      ? "=== COMMUNICATIONS (read only, this order and earlier orders) ===\n"
+      : "=== COMMUNICATIONS ===\n") + merged).slice(0, 12000)
+    : "";
+  return { found: !!(text || links.size), text, tracking, links: [...links] };
+}
+
+function mgImageToDataUrl(img) {
+  return new Promise((resolve) => {
+    try {
+      const w = img.naturalWidth || img.width;
+      const h = img.naturalHeight || img.height;
+      if (!w || !h) { resolve(""); return; }
+      const scale = Math.min(1, 1024 / Math.max(w, h));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.72));
+    } catch (_) {
+      resolve("");
+    }
+  });
+}
+
+function mgCanvasFromMedia(media, maxSide = 1024, quality = 0.72) {
+  try {
+    const w = media.videoWidth || media.naturalWidth || media.width || 0;
+    const h = media.videoHeight || media.naturalHeight || media.height || 0;
+    if (!w || !h) return "";
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(w * scale));
+    canvas.height = Math.max(1, Math.round(h * scale));
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(media, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", quality);
+  } catch (_) {
+    return "";
+  }
+}
+
+function mgVideoFrameToDataUrl(video, seekRatio) {
+  return new Promise((resolve) => {
+    if (!video) { resolve(""); return; }
+    let settled = false;
+    const finish = (url) => {
+      if (settled) return;
+      settled = true;
+      resolve(url || "");
+    };
+    const capture = () => finish(mgCanvasFromMedia(video));
+    const seekAndCapture = () => {
+      try {
+        const duration = Number(video.duration);
+        if (Number.isFinite(duration) && duration > 0.2) {
+          const target = Math.min(Math.max(duration * (seekRatio || 0.2), 0.05), Math.max(duration - 0.05, 0.05));
+          const onSeeked = () => {
+            video.removeEventListener("seeked", onSeeked);
+            capture();
+          };
+          video.addEventListener("seeked", onSeeked);
+          try { video.currentTime = target; } catch (_) { capture(); }
+          setTimeout(() => finish(mgCanvasFromMedia(video)), 900);
+          return;
+        }
+      } catch (_) {}
+      capture();
+    };
+    try {
+      if (video.readyState >= 2) seekAndCapture();
+      else {
+        const onReady = () => {
+          video.removeEventListener("loadeddata", onReady);
+          seekAndCapture();
+        };
+        video.addEventListener("loadeddata", onReady);
+        try { video.load?.(); } catch (_) {}
+        setTimeout(() => finish(mgCanvasFromMedia(video)), 1200);
+      }
+    } catch (_) {
+      finish("");
+    }
+  });
+}
+
+async function mgWaitForDocModalMedia(timeoutMs = 1800) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const modal = document.getElementById("od2DocModal");
+    const open = modal && (modal.classList.contains("is-open") || modal.offsetParent !== null);
+    if (open) {
+      const media = modal.querySelectorAll("#od2ModalBody > img, #od2ModalBody video, .od2-modal-body img, .od2-modal-body video");
+      if (media.length) return [...media];
+    }
+    await new Promise((r) => setTimeout(r, 120));
+  }
+  return [];
+}
+
+async function mgCloseDocModalQuiet() {
+  try {
+    const modal = document.getElementById("od2DocModal");
+    if (!modal) return;
+    if (typeof window.od2CloseDocModal === "function") window.od2CloseDocModal();
+    else {
+      const closeBtn = modal.querySelector(".od2-doc-modal-close, .od2-modal-close, [data-action='close'], .close, [aria-label='Close']");
+      closeBtn?.click();
+    }
+    window.__mgViewedDocId = null;
+  } catch (_) {}
+}
+
+async function mgCaptureOpenModalFrames(title, out, seen, max) {
+  const media = await mgWaitForDocModalMedia();
+  for (const el of media) {
+    if (out.length >= max) break;
+    if (el.tagName === "VIDEO") {
+      for (const ratio of [0.15, 0.45, 0.75]) {
+        if (out.length >= max) break;
+        const dataUrl = await mgVideoFrameToDataUrl(el, ratio);
+        if (!dataUrl || dataUrl.length < 80 || dataUrl.length > 1800000) continue;
+        const key = dataUrl.slice(0, 120) + dataUrl.length;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          kind: "image",
+          dataUrl,
+          name: `${title || "document video"} (frame ${Math.round(ratio * 100)}%)`,
+        });
+      }
+    } else {
+      const dataUrl = await mgImageToDataUrl(el);
+      if (!dataUrl || dataUrl.length < 80 || dataUrl.length > 1800000) continue;
+      const key = dataUrl.slice(0, 120) + dataUrl.length;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ kind: "image", dataUrl, name: title || "document photo" });
+    }
+  }
+}
+
+async function collectDocumentImages(limit, options) {
+  const max = Math.max(2, limit || 6);
+  const openModals = !!(options && options.openModals);
+  const docsTabBtn = document.querySelector('.od2-tab[data-tab="documents"]');
+  const wasOnDocs = !!(docsTabBtn && docsTabBtn.classList.contains("active"));
+  if (openModals && docsTabBtn && !wasOnDocs) {
+    try { docsTabBtn.click(); } catch (_) {}
+    await new Promise((r) => setTimeout(r, 180));
+  }
+
+  const cards = [...document.querySelectorAll(".od2-doc-card")].map((card) => {
+    const docId = card.getAttribute("data-doc-id") || card.dataset?.docId || "";
+    const title = (
+      card.querySelector(".doc-title")?.textContent
+      || card.querySelector(".od2-doc-title")?.textContent
+      || ""
+    ).trim();
+    const subtitle = (
+      card.querySelector(".doc-subtitle")?.textContent
+      || card.querySelector(".od2-doc-subtitle")?.textContent
+      || ""
+    ).trim();
+    const img = card.querySelector(".od2-doc-preview img, img");
+    const video = card.querySelector(".od2-doc-preview video, video");
+    const kindHint = `${title} ${subtitle}`.toLowerCase();
+    const isVideo = !!video || /video/.test(kindHint);
+    let score = /id|passport|driving|licence|license|weight|photo|selfie|scale|video/i.test(kindHint) ? 3 : 1;
+    if (isVideo) score += 2;
+    if (img || video) score += 1;
+    return {
+      docId,
+      title: title || subtitle || (isVideo ? "document video" : "document photo"),
+      img,
+      video,
+      isVideo,
+      score,
+    };
+  });
+  cards.sort((a, b) => b.score - a.score);
+
+  const out = [];
+  const seen = new Set();
+
+  // Prefer whatever is already open in the modal.
+  await mgCaptureOpenModalFrames("Open document", out, seen, max);
+
+  for (const item of cards) {
+    if (out.length >= max) break;
+    if (item.video) {
+      for (const ratio of [0.15, 0.45, 0.75]) {
+        if (out.length >= max) break;
+        const dataUrl = await mgVideoFrameToDataUrl(item.video, ratio);
+        if (!dataUrl || dataUrl.length < 80 || dataUrl.length > 1800000) continue;
+        const key = dataUrl.slice(0, 120) + dataUrl.length;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({
+          kind: "image",
+          dataUrl,
+          name: `${item.title} (frame ${Math.round(ratio * 100)}%)`,
+        });
+      }
+      continue;
+    }
+    if (item.img) {
+      const dataUrl = await mgImageToDataUrl(item.img);
+      if (dataUrl && dataUrl.length >= 80 && dataUrl.length <= 1800000) {
+        const key = dataUrl.slice(0, 120) + dataUrl.length;
+        if (!seen.has(key)) {
+          seen.add(key);
+          out.push({ kind: "image", dataUrl, name: item.title });
+        }
+      }
+    }
+    // When asked to fully re-read, open video / key docs so frames can be captured.
+    if (!openModals) continue;
+    if (!item.isVideo && !/id|passport|driving|licence|license|weight|scale|photo|selfie/i.test(item.title)) continue;
+    if (item.img && !item.isVideo) continue;
+    const actionsDiv = item.docId
+      ? document.querySelector(`.od2-doc-actions[data-doc-id="${item.docId}"]`)
+      : null;
+    const viewBtn = actionsDiv && [...actionsDiv.querySelectorAll(".od2-doc-btn")].find((b) => {
+      const oc = b.getAttribute("onclick") || "";
+      return oc.includes("od2OpenDocModal") && !b.classList.contains("is-disabled");
+    });
+    if (!viewBtn) continue;
+    try {
+      viewBtn.click();
+      window.__mgViewedDocId = item.docId || null;
+      await mgCaptureOpenModalFrames(item.title, out, seen, max);
+    } catch (_) {
+    } finally {
+      await mgCloseDocModalQuiet();
+      await new Promise((r) => setTimeout(r, 80));
+    }
+  }
+  return out;
+}
+
+let mgDossierFlight = null;
+
+function buildOrderDossier(force) {
+  const cached = window.__mgOrderDossier;
+  if (!force && cached && cached.path === location.pathname && Date.now() - cached.at < 90000) {
+    return Promise.resolve(cached);
+  }
+  if (mgDossierFlight) {
+    return force ? mgDossierFlight.then(() => buildOrderDossier(true)) : mgDossierFlight;
+  }
+  const run = (async () => {
+    const tabs = collectOrderTabText();
+    let comms = { found: false, text: "", tracking: "", links: [] };
+    try { comms = await readAllOrderCommunications(); } catch (_) {}
+    let images = [];
+    try { images = await collectDocumentImages(6, { openModals: !!force }); } catch (_) {}
+    const record = [tabs, comms.text].filter(Boolean).join("\n\n");
+    const tracking = comms.tracking || mgTrackingBlock(record, comms.links || []);
+    const dossier = {
+      path: location.pathname,
+      text: (tracking ? tracking + "\n\n" : "") + record.slice(0, tracking ? 17000 : 18000),
+      images,
+      commsFound: !!comms.found,
+      at: Date.now(),
+    };
+    window.__mgOrderDossier = dossier;
+    return dossier;
+  })();
+  mgDossierFlight = run;
+  run.finally(() => {
+    if (mgDossierFlight === run) mgDossierFlight = null;
+  });
+  return run;
+}
+
 function performScan() {
   // Only scan on od2-tab pages
   if (!document.querySelector(".od2-tabs")) return;
@@ -2564,14 +3061,38 @@ function mgOrderPath() {
 
 let mgTrackedOrderPath = mgOrderPath();
 
+function mgOrderDomReady() {
+  return !!(
+    document.querySelector(".od2-tabs") ||
+    document.querySelector(".od2-patient-name, .patient-name-text")
+  );
+}
+
 function mgNoteOrderUrl(force) {
   const path = mgOrderPath();
   if (!/^\/order\//.test(path)) return;
-  if (!force && path === mgTrackedOrderPath) return;
-  mgTrackedOrderPath = path;
-  lastScannedData = null;
-  chrome.runtime.sendMessage({ type: "ORDER_URL_CHANGED", url: location.href }).catch(() => {});
-  setTimeout(() => { try { performScan(); } catch (_) {} }, 350);
+  const changed = path !== mgTrackedOrderPath;
+  if (!force && !changed) return;
+  if (changed) {
+    mgTrackedOrderPath = path;
+    lastScannedData = null;
+    window.__mgOrderDossier = null;
+    window.__mgOrderBrief = null;
+    window.__mgOrderOverview = null;
+    try { window.__mgSwitchAiOrder && window.__mgSwitchAiOrder(); } catch (_) {}
+    chrome.runtime.sendMessage({ type: "ORDER_URL_CHANGED", url: location.href }).catch(() => {});
+  }
+  let tries = 0;
+  const attempt = () => {
+    tries += 1;
+    if (mgOrderPath() !== path) return;
+    if (mgOrderDomReady()) {
+      try { performScan(); } catch (_) {}
+      return;
+    }
+    if (tries < 25) setTimeout(attempt, 300);
+  };
+  attempt();
 }
 
 function mgWatchOrderUrl() {
@@ -2590,6 +3111,10 @@ function mgWatchOrderUrl() {
     return result;
   };
   window.addEventListener("popstate", () => mgNoteOrderUrl(false));
+  if (window.navigation && typeof window.navigation.addEventListener === "function") {
+    window.navigation.addEventListener("navigatesuccess", () => mgNoteOrderUrl(false));
+  }
+  setInterval(() => mgNoteOrderUrl(false), 400);
   mgNoteOrderUrl(true);
 }
 
@@ -5054,7 +5579,15 @@ function injectMacroModal() {
     #mg-macro-tab:hover { background: #5f61e6 !important; }
     #mg-macro-tab svg { width: 18px; height: 18px; display: block; }
 
-    #mg-macro-backdrop { display: none !important; }
+    #mg-macro-backdrop {
+      display: block !important;
+      position: fixed !important;
+      inset: 0 !important;
+      z-index: 2147483590 !important;
+      background: transparent !important;
+      pointer-events: none !important;
+    }
+    #mg-macro-backdrop.open { pointer-events: auto !important; }
 
     #mg-macro-panel {
       position: relative !important;
@@ -5098,6 +5631,13 @@ function injectMacroModal() {
       display: grid; place-items: center;
     }
     #mg-macro-close:hover { background: rgba(255,255,255,0.32); }
+    #mg-macro-sidebar-toggle {
+      background: rgba(255,255,255,0.18); border: none; color: #fff;
+      border-radius: 999px; padding: 7px 12px; cursor: pointer;
+      font: 700 12px/1 inherit; white-space: nowrap;
+    }
+    #mg-macro-sidebar-toggle:hover { background: rgba(255,255,255,0.32); }
+    #mg-macro-panel.sidebar-closed #mg-macro-sidebar { display: none !important; }
 
     .mg-mac-body { display: flex; flex: 1; min-height: 0; }
 
@@ -5291,8 +5831,8 @@ function injectMacroModal() {
     }
 
     #mg-macro-detail {
-      flex: 1; min-width: 0; display: flex; flex-direction: column;
-      background: #0f172a;
+      flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column;
+      background: #0f172a; overflow: hidden;
     }
     #mg-macro-detail-empty {
       flex: 1; display: grid; place-items: center;
@@ -5345,63 +5885,243 @@ function injectMacroModal() {
       background: #0b1220; color: #e9d5ff;
       border-color: #334155; border-bottom-color: #0b1220;
     }
-    #mg-macro-write-pane, #mg-macro-ai-pane {
+    #mg-macro-write-pane {
       flex: 1; display: flex; flex-direction: column; min-height: 0;
+      overflow-x: hidden; overflow-y: auto; padding-bottom: 18px;
+    }
+    #mg-macro-ai-pane {
+      flex: 1; display: flex; flex-direction: column; min-height: 0;
+      overflow: hidden;
+    }
+    #mg-macro-ai-pane::-webkit-scrollbar, #mg-macro-ai-result::-webkit-scrollbar,
+    #mg-macro-ai-prompt::-webkit-scrollbar, #mg-macro-ai-chat-log::-webkit-scrollbar { width: 8px; }
+    #mg-macro-ai-pane::-webkit-scrollbar-thumb, #mg-macro-ai-result::-webkit-scrollbar-thumb,
+    #mg-macro-ai-prompt::-webkit-scrollbar-thumb, #mg-macro-ai-chat-log::-webkit-scrollbar-thumb {
+      background: #475569; border-radius: 4px;
     }
     #mg-macro-write-pane[hidden], #mg-macro-ai-pane[hidden] { display: none !important; }
     .mg-ai-top-bar {
-      display: flex; justify-content: flex-end; align-items: center;
-      padding: 8px 20px 0; flex-shrink: 0; min-height: 0;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      padding: 10px 16px 8px; flex-shrink: 0; border-bottom: 1px solid #1e293b;
     }
-    #mg-macro-ai-history-toggle {
-      display: inline-flex; align-items: center; gap: 6px;
-      padding: 5px 10px; border-radius: 8px;
-      border: 1px solid #334155; background: #1e293b;
-      color: #94a3b8; font: 600 11px/1 inherit; cursor: pointer;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    #mg-macro-ai-history-toggle[hidden] { display: none !important; }
-    #mg-macro-ai-history-toggle:hover { background: #283548; color: #e2e8f0; }
-    #mg-macro-ai-history-toggle[aria-expanded="true"] {
-      border-color: rgba(139,92,246,0.45); color: #c4b5fd; background: rgba(139,92,246,0.12);
-    }
-    #mg-macro-ai-history-count {
-      display: inline-flex; align-items: center; justify-content: center;
-      min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
-      background: rgba(139,92,246,0.25); color: #c4b5fd; font-size: 10px;
-    }
+    #mg-macro-ai-history-toggle { display: none !important; }
     #mg-macro-ai-pane label {
-      display: block; padding: 10px 20px 6px; font-size: 10px; font-weight: 700;
+      display: block; padding: 8px 4px 4px; font-size: 10px; font-weight: 700;
       letter-spacing: 0.06em; text-transform: uppercase; color: #a78bfa;
     }
     #mg-macro-ai-pane label[hidden] { display: none !important; }
+    #mg-macro-ai-context {
+      margin: 0; padding: 0 16px; background: transparent; border: none; flex-shrink: 0;
+    }
+    #mg-macro-ai-context[hidden] { display: none !important; }
+    .mg-ai-context-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.04em;
+      text-transform: uppercase; color: #c4b5fd; margin: 8px 2px 6px;
+    }
+    #mg-macro-ai-context-refresh {
+      border: none; background: transparent; color: #ddd6fe;
+      font: 700 11px/1 inherit; cursor: pointer; text-transform: none; letter-spacing: 0;
+      padding: 4px 2px;
+    }
+    .mg-ai-context-card {
+      background: rgba(139,92,246,0.14);
+      border: 1px solid rgba(167,139,250,0.38);
+      border-radius: 12px;
+      padding: 10px 12px 12px;
+      margin: 0 0 8px;
+    }
+    .mg-ai-context-card:last-child { margin-bottom: 0; }
+    .mg-ai-context-meta {
+      display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px;
+    }
+    .mg-ai-context-when,
+    .mg-ai-context-order,
+    .mg-ai-context-where {
+      display: inline-flex; align-items: center;
+      padding: 4px 9px; border-radius: 999px;
+      font-size: 11px; font-weight: 700; line-height: 1.2;
+    }
+    .mg-ai-context-when { background: #0b1220; color: #f8fafc; }
+    .mg-ai-context-order { background: rgba(124,58,237,0.55); color: #fff; }
+    .mg-ai-context-where { background: rgba(15,23,42,0.72); color: #cbd5e1; }
+    .mg-ai-context-text {
+      margin: 0; padding: 0 2px;
+      font-size: 12px; line-height: 1.4; font-weight: 700;
+      letter-spacing: 0.02em; text-transform: uppercase; color: #c4b5fd;
+    }
+    .mg-ai-context-said {
+      margin: 8px 0 0; padding: 10px 12px 11px;
+      border-radius: 8px; background: rgba(11, 18, 32, 0.55);
+      border-left: 3px solid #c4b5fd;
+    }
+    .mg-ai-context-said-label {
+      display: block; margin-bottom: 4px;
+      font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+      text-transform: uppercase; color: #a78bfa;
+    }
+    .mg-ai-context-said-text {
+      margin: 0; font-size: 13.5px; line-height: 1.5; color: #f8fafc;
+    }
+    .mg-ai-context-loading {
+      margin: 0; padding: 12px 16px; border-radius: 12px;
+      background: rgba(139,92,246,0.1); border: 1px solid rgba(167,139,250,0.28);
+      color: #ddd6fe; font-size: 13px;
+    }
+    .mg-ai-mode {
+      position: relative; display: grid; grid-template-columns: 1fr 1fr;
+      width: min(280px, 100%); height: 36px; padding: 3px;
+      border-radius: 999px; background: #0b1220;
+      border: 1px solid #334155; box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+      flex-shrink: 0;
+    }
+    .mg-ai-mode-thumb {
+      position: absolute; top: 3px; left: 3px; width: calc(50% - 3px); height: calc(100% - 6px);
+      border-radius: 999px;
+      background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+      box-shadow: 0 4px 12px rgba(124,58,237,0.45), 0 0 0 1px rgba(167,139,250,0.25);
+      transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none; z-index: 0;
+    }
+    .mg-ai-mode[data-mode="draft"] .mg-ai-mode-thumb { transform: translateX(100%); }
+    .mg-ai-mode button {
+      position: relative; z-index: 1;
+      border: none; background: transparent; color: #94a3b8;
+      border-radius: 999px; padding: 0; cursor: pointer;
+      font: 700 12.5px/1 inherit; transition: color 0.2s ease;
+    }
+    .mg-ai-mode button.active { color: #fff; }
+    .mg-ai-mode-hint { display: none; }
+    .mg-ai-summary-row {
+      display: flex; align-items: center; gap: 10px;
+      margin: 8px 16px 6px; flex-shrink: 0;
+    }
+    #mg-macro-ai-summary {
+      border: none; cursor: pointer; font: 700 12px/1 inherit;
+      background: #7c3aed; color: #fff; border-radius: 999px;
+      padding: 7px 12px; white-space: nowrap;
+    }
+    #mg-macro-ai-summary:hover { background: #6d28d9; }
+    #mg-macro-ai-summary:disabled, #mg-macro-ai-ask:disabled { opacity: 0.6; cursor: default; }
+    .mg-ai-summary-hint { font-size: 11px; color: #94a3b8; }
+    #mg-macro-ai-overview {
+      margin: 0 16px 8px; padding: 12px 14px;
+      border-radius: 12px; background: #0b1220;
+      border: 1px solid #334155; flex-shrink: 0; max-height: 140px; overflow-y: auto;
+    }
+    #mg-macro-ai-overview[hidden] { display: none !important; }
+    #mg-macro-ai-overview-body {
+      margin: 0; white-space: pre-wrap;
+      font-size: 12.5px; line-height: 1.5; color: #f1f5f9;
+    }
+    .mg-ai-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 16px 8px; flex-shrink: 0; }
+    .mg-ai-chip {
+      border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+      border-radius: 999px; padding: 5px 10px; cursor: pointer;
+      font: 650 11.5px/1 inherit;
+    }
+    .mg-ai-chip:hover { border-color: #8b5cf6; color: #fff; }
+    .mg-ai-chat-shell {
+      flex: 1; min-height: 0; display: flex; flex-direction: column;
+      margin: 0 12px; border: 1px solid #243044; border-radius: 14px;
+      background:
+        radial-gradient(ellipse at top left, rgba(124,58,237,0.08), transparent 42%),
+        linear-gradient(180deg, #0a1020 0%, #0b1220 100%);
+      overflow: hidden;
+    }
+    #mg-macro-ai-chat-log {
+      flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+      padding: 14px 12px 18px; display: flex; flex-direction: column; gap: 10px;
+      scroll-behavior: smooth;
+    }
+    #mg-macro-ai-chat-log[hidden] { display: none !important; }
+    .mg-ai-chat-empty {
+      margin: auto; max-width: 280px; text-align: center;
+      color: #64748b; font-size: 13px; line-height: 1.45; padding: 24px 12px;
+    }
+    .mg-ai-chat-empty strong { display: block; color: #cbd5e1; font-size: 14px; margin-bottom: 6px; }
+    .mg-ai-bubble-row {
+      display: flex; width: 100%;
+    }
+    .mg-ai-bubble-row.user { justify-content: flex-end; }
+    .mg-ai-bubble-row.assistant { justify-content: flex-start; }
+    .mg-ai-bubble {
+      max-width: min(86%, 520px); padding: 10px 12px 11px;
+      border-radius: 16px; font-size: 13px; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word;
+      box-shadow: 0 6px 16px rgba(2, 6, 23, 0.28);
+      animation: mgAiBubbleIn 0.22s ease-out;
+    }
+    .mg-ai-bubble-row.user .mg-ai-bubble {
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: #fff; border-bottom-right-radius: 5px;
+    }
+    .mg-ai-bubble-row.assistant .mg-ai-bubble {
+      background: #1a2333; color: #e2e8f0;
+      border: 1px solid #334155; border-bottom-left-radius: 5px;
+    }
+    .mg-ai-bubble-meta {
+      display: block; margin-bottom: 4px;
+      font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+      text-transform: uppercase; opacity: 0.72;
+    }
+    .mg-ai-bubble-row.typing .mg-ai-bubble { color: #94a3b8; font-style: italic; }
+    @keyframes mgAiBubbleIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    #mg-macro-ai-draft-panel {
+      flex-shrink: 0; border-top: 1px solid #1e293b; background: #0f172a;
+      padding: 8px 16px 0; max-height: 42%; overflow-y: auto;
+    }
+    #mg-macro-ai-draft-panel[hidden] { display: none !important; }
     #mg-macro-ai-prompt, #mg-macro-ai-result {
-      margin: 0 20px; width: calc(100% - 40px); box-sizing: border-box;
-      min-height: 88px; max-height: 160px; padding: 12px 14px;
-      border-radius: 10px; border: 1px solid #334155; background: #0b1220;
-      color: #e2e8f0; font-size: 13px; line-height: 1.5; resize: vertical;
-      font-family: inherit; outline: none;
+      width: 100%; box-sizing: border-box;
+      padding: 10px 12px; border-radius: 12px; border: 1px solid #334155;
+      background: #0b1220; color: #e2e8f0; font-size: 13px; line-height: 1.5;
+      resize: none; font-family: inherit; outline: none; overflow-y: auto;
+    }
+    #mg-macro-ai-prompt {
+      min-height: 44px; max-height: 120px; flex: 1;
     }
     #mg-macro-ai-result {
-      flex: 1; min-height: 140px; max-height: none;
-      font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      min-height: 110px; max-height: 220px;
+      font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      margin-bottom: 8px;
     }
     #mg-macro-ai-prompt:focus, #mg-macro-ai-result:focus {
       border-color: #7c3aed; box-shadow: 0 0 0 2px rgba(124,58,237,0.25);
     }
     #mg-macro-ai-prompt::placeholder { color: #64748b; }
+    .mg-ai-composer {
+      flex-shrink: 0; border-top: 1px solid #1e293b; background: #0f172a;
+      padding: 10px 14px 12px;
+    }
+    .mg-ai-composer.dragover {
+      background: rgba(139,92,246,0.12);
+      box-shadow: inset 0 0 0 1px rgba(139,92,246,0.45);
+    }
+    .mg-ai-composer-row {
+      display: flex; align-items: flex-end; gap: 8px;
+    }
+    #mg-macro-ai-attach-btn {
+      width: 40px; height: 40px; flex-shrink: 0; border-radius: 12px;
+      border: 1px solid #334155; background: #1e293b; color: #c4b5fd;
+      cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+    }
+    #mg-macro-ai-attach-btn:hover { border-color: #8b5cf6; color: #fff; }
+    #mg-macro-ai-dropzone { display: none !important; }
     .mg-macro-ai-actions {
-      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
-      padding: 12px 20px; flex-shrink: 0;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      padding: 8px 0 0; flex-shrink: 0;
     }
     #mg-macro-ai-result-actions {
       display: flex; align-items: center; gap: 8px;
-      padding: 12px 20px; flex-shrink: 0;
-      border-top: 1px solid #1e293b; background: #0f172a;
+      padding: 0 0 10px; flex-shrink: 0;
     }
     #mg-macro-ai-result-actions[hidden] { display: none !important; }
     #mg-macro-ai-result-actions .mg-mac-btn {
-      flex: 1 1 0; justify-content: center; min-height: 40px;
+      flex: 1 1 0; justify-content: center; min-height: 36px;
     }
     #mg-macro-ai-result-actions .mg-mac-btn.secondary {
       flex: 0 0 auto; min-width: 72px;
@@ -5411,29 +6131,8 @@ function injectMacroModal() {
     }
     #mg-macro-ai-status.error { color: #f87171; }
     #mg-macro-ai-status.success { color: #4ade80; }
-    #mg-macro-ai-chat-log {
-      margin: 6px 20px 0; max-height: 160px; overflow-y: auto;
-      border: 1px solid #334155; border-radius: 8px; background: #0b1220;
-      padding: 10px 12px; flex-shrink: 0;
-    }
-    #mg-macro-ai-chat-log[hidden] { display: none !important; }
-    #mg-macro-ai-chat-log:empty { display: none; }
-    .mg-ai-chat-turn { margin-bottom: 8px; font-size: 11.5px; line-height: 1.4; }
-    .mg-ai-chat-turn:last-child { margin-bottom: 0; }
-    .mg-ai-chat-turn.user { color: #c4b5fd; }
-    .mg-ai-chat-turn.assistant { color: #94a3b8; }
-    .mg-ai-chat-turn strong { color: #e2e8f0; font-weight: 700; }
-    #mg-macro-ai-dropzone {
-      margin: 8px 20px 8px; padding: 12px 14px; border-radius: 10px;
-      border: 1px dashed #475569; background: rgba(15,23,42,0.6);
-      color: #64748b; font-size: 11.5px; text-align: center; cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
-    }
-    #mg-macro-ai-dropzone.dragover {
-      border-color: #8b5cf6; background: rgba(139,92,246,0.12); color: #c4b5fd;
-    }
     #mg-macro-ai-attach-list {
-      display: flex; flex-wrap: wrap; gap: 6px; padding: 0 20px 8px;
+      display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 8px;
     }
     #mg-macro-ai-attach-list:empty { display: none; }
     .mg-ai-attach-chip {
@@ -5455,6 +6154,12 @@ function injectMacroModal() {
       font-size: 11px; color: #94a3b8; cursor: pointer; user-select: none;
     }
     .mg-ai-web-toggle input { accent-color: #8b5cf6; }
+    #mg-macro-ai-new-chat {
+      border: 1px solid #334155; background: #1e293b; color: #cbd5e1;
+      border-radius: 999px; padding: 7px 12px; cursor: pointer;
+      font: 700 11.5px/1 inherit; white-space: nowrap;
+    }
+    #mg-macro-ai-new-chat:hover { border-color: #8b5cf6; color: #fff; }
     .mg-mac-btn.ai-btn {
       background: linear-gradient(180deg, #a855f7, #9333ea);
       box-shadow: 0 3px 8px rgba(147,51,234,0.35);
@@ -5526,8 +6231,9 @@ function injectMacroModal() {
       <div class="mg-mac-logo">✉️</div>
       <div class="mg-mac-titles">
         <div class="mg-mac-title">Patient Email Macros</div>
-        <div class="mg-mac-subtitle">Search by category • Edit • Copy</div>
+        <div class="mg-mac-subtitle">AI Assist • order context</div>
       </div>
+      <button id="mg-macro-sidebar-toggle" type="button" aria-expanded="false">Templates</button>
       <button id="mg-macro-close" type="button" aria-label="Close">✕</button>
     </div>
     <div class="mg-mac-body">
@@ -5585,30 +6291,67 @@ function injectMacroModal() {
           </div>
           <div id="mg-macro-ai-pane" hidden>
             <div class="mg-ai-top-bar">
-              <button type="button" id="mg-macro-ai-history-toggle" hidden title="Show conversation history" aria-expanded="false">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+              <div class="mg-ai-mode" role="group" aria-label="AI mode" data-mode="chat">
+                <div class="mg-ai-mode-thumb" aria-hidden="true"></div>
+                <button type="button" id="mg-macro-ai-mode-chat" class="active">Chat</button>
+                <button type="button" id="mg-macro-ai-mode-draft">Draft email</button>
+              </div>
+              <button type="button" id="mg-macro-ai-new-chat" title="Clear this prescription's chat">Clear chat</button>
+              <button type="button" id="mg-macro-ai-history-toggle" hidden aria-hidden="true">
                 History <span id="mg-macro-ai-history-count">0</span>
               </button>
+              <span class="mg-ai-mode-hint" id="mg-macro-ai-mode-hint" hidden>Enter chats about this order. Shift+Enter for a new line.</span>
             </div>
-            <div id="mg-macro-ai-chat-log" hidden></div>
-            <div id="mg-macro-ai-dropzone">Drop screenshots, PDFs, or text files here — click to browse, or paste (Ctrl+V)</div>
-            <div id="mg-macro-ai-attach-list"></div>
-            <label for="mg-macro-ai-prompt" id="mg-macro-ai-prompt-label">Your instructions</label>
-            <textarea id="mg-macro-ai-prompt" rows="3" placeholder="e.g. Last order Feb 2026 but they say recent injection — ask if another provider…"></textarea>
-            <div class="mg-macro-ai-actions">
-              <button type="button" class="mg-mac-btn ai-btn" id="mg-macro-ai-generate">✨ Generate</button>
-              <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-new-chat" title="Start a new conversation">New chat</button>
-              <label class="mg-ai-web-toggle" title="Search the web for factual context (Tavily key in Settings for best results)">
-                <input type="checkbox" id="mg-macro-ai-web-search" checked /> Web search
-              </label>
-              <span id="mg-macro-ai-status">Add your OpenAI API key in Settings → Save</span>
+            <div id="mg-macro-ai-context" hidden>
+              <div class="mg-ai-context-head">
+                <span>From this order</span>
+                <button type="button" id="mg-macro-ai-context-refresh">Re-read order</button>
+              </div>
+              <div id="mg-macro-ai-context-body"></div>
             </div>
-            <label for="mg-macro-ai-result" id="mg-macro-ai-result-label" hidden>Current draft — edit before sending</label>
-            <textarea id="mg-macro-ai-result" rows="10" spellcheck="true" aria-label="AI generated message — editable" hidden></textarea>
-            <div id="mg-macro-ai-result-actions" hidden>
-              <button type="button" class="mg-mac-btn" id="mg-macro-ai-use-editor">Use in editor</button>
-              <button type="button" class="mg-mac-btn chat-btn" id="mg-macro-ai-insert-chat">Insert into chat</button>
-              <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-copy-result">Copy</button>
+            <div class="mg-ai-summary-row">
+              <button type="button" id="mg-macro-ai-summary">Order summary</button>
+              <span class="mg-ai-summary-hint">Loads SCR, dose, and what matters when you click.</span>
+            </div>
+            <div id="mg-macro-ai-overview" hidden>
+              <div id="mg-macro-ai-overview-body"></div>
+            </div>
+            <div class="mg-ai-tools" id="mg-macro-ai-tools">
+              <button type="button" class="mg-ai-chip" data-ai-tool="tracking">Tracking</button>
+              <button type="button" class="mg-ai-chip" data-ai-tool="dose">Last injection</button>
+              <button type="button" class="mg-ai-chip" data-ai-tool="side">Side effects</button>
+              <button type="button" class="mg-ai-chip" data-ai-tool="id">ID and photos</button>
+            </div>
+            <div class="mg-ai-chat-shell">
+              <div id="mg-macro-ai-chat-log" aria-live="polite"></div>
+            </div>
+            <div id="mg-macro-ai-draft-panel" hidden>
+              <label for="mg-macro-ai-result" id="mg-macro-ai-result-label">Current draft — edit before sending</label>
+              <textarea id="mg-macro-ai-result" rows="6" spellcheck="true" aria-label="AI generated message — editable"></textarea>
+              <div id="mg-macro-ai-result-actions" hidden>
+                <button type="button" class="mg-mac-btn" id="mg-macro-ai-use-editor">Use in editor</button>
+                <button type="button" class="mg-mac-btn chat-btn" id="mg-macro-ai-insert-chat">Insert into chat</button>
+                <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-copy-result">Copy</button>
+              </div>
+            </div>
+            <div class="mg-ai-composer" id="mg-macro-ai-composer">
+              <div id="mg-macro-ai-dropzone" hidden>Drop files here</div>
+              <div id="mg-macro-ai-attach-list"></div>
+              <div class="mg-ai-composer-row">
+                <button type="button" id="mg-macro-ai-attach-btn" title="Attach screenshot, PDF, video, or text file" aria-label="Attach file">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-8.49 8.49a5.5 5.5 0 01-7.78-7.78l8.49-8.49a3.5 3.5 0 014.95 4.95l-8.49 8.49a1.5 1.5 0 01-2.12-2.12l7.78-7.78"/></svg>
+                </button>
+                <textarea id="mg-macro-ai-prompt" rows="1" placeholder="Ask what the patient requested, or check a clinical point. Enter sends." aria-label="Message"></textarea>
+                <button type="button" class="mg-mac-btn ai-btn" id="mg-macro-ai-generate">Send</button>
+              </div>
+              <div class="mg-macro-ai-actions">
+                <button type="button" class="mg-mac-btn secondary" id="mg-macro-ai-ask" hidden>Ask about this order</button>
+                <label class="mg-ai-web-toggle" title="Search the web for factual context (Tavily key in Settings for best results)">
+                  <input type="checkbox" id="mg-macro-ai-web-search" checked /> Web search
+                </label>
+                <span id="mg-macro-ai-status">Add your OpenAI API key in Settings → Save</span>
+              </div>
+              <label for="mg-macro-ai-prompt" id="mg-macro-ai-prompt-label" hidden>Ask about this order</label>
             </div>
           </div>
         </div>
@@ -5691,6 +6434,9 @@ function injectMacroModal() {
   const aiPane = panel.querySelector("#mg-macro-ai-pane");
   const aiDropzone = panel.querySelector("#mg-macro-ai-dropzone");
   const aiAttachList = panel.querySelector("#mg-macro-ai-attach-list");
+  const aiAttachBtn = panel.querySelector("#mg-macro-ai-attach-btn");
+  const aiComposer = panel.querySelector("#mg-macro-ai-composer");
+  const aiDraftPanel = panel.querySelector("#mg-macro-ai-draft-panel");
   const aiHistoryToggle = panel.querySelector("#mg-macro-ai-history-toggle");
   const aiHistoryCount = panel.querySelector("#mg-macro-ai-history-count");
   const aiChatLog = panel.querySelector("#mg-macro-ai-chat-log");
@@ -5701,6 +6447,10 @@ function injectMacroModal() {
   const aiResultActions = panel.querySelector("#mg-macro-ai-result-actions");
   const aiGenerateBtn = panel.querySelector("#mg-macro-ai-generate");
   const aiNewChatBtn = panel.querySelector("#mg-macro-ai-new-chat");
+  const aiModeEl = panel.querySelector(".mg-ai-mode");
+  const aiModeChatBtn = panel.querySelector("#mg-macro-ai-mode-chat");
+  const aiModeDraftBtn = panel.querySelector("#mg-macro-ai-mode-draft");
+  const aiModeHint = panel.querySelector("#mg-macro-ai-mode-hint");
   const aiWebSearch = panel.querySelector("#mg-macro-ai-web-search");
   const aiUseEditorBtn = panel.querySelector("#mg-macro-ai-use-editor");
   const aiInsertChatBtn = panel.querySelector("#mg-macro-ai-insert-chat");
@@ -5709,18 +6459,22 @@ function injectMacroModal() {
   const aiFileInput = document.createElement("input");
   aiFileInput.type = "file";
   aiFileInput.multiple = true;
-  aiFileInput.accept = "image/*,.pdf,.txt,.csv,.doc,.docx";
+  aiFileInput.accept = "image/*,video/*,.pdf,.txt,.csv,.doc,.docx";
   aiFileInput.hidden = true;
   aiPane?.appendChild(aiFileInput);
   let aiGenerating = false;
-  let customDetailMode = "write";
+  let customDetailMode = "ai";
+  let aiMode = "chat";
   let aiChatHistory = [];
+  let aiAskHistory = [];
+  let aiBoundKey = "";
+  let aiHistoryBind = 0;
   let aiAttachments = [];
   let aiAttachSeq = 0;
   let aiHistoryLogOpen = false;
   const macroSessionCache = {
     orderKey: null,
-    customDetailMode: "write",
+    customDetailMode: "ai",
     aiChatHistory: [],
     aiDraft: "",
     aiPromptText: "",
@@ -5729,6 +6483,10 @@ function injectMacroModal() {
   };
 
   function currentMacroSessionKey() {
+    try {
+      const match = location.pathname.match(/\/order\/(\d+)/);
+      if (match) return `rx:${match[1]}`;
+    } catch (_) {}
     const d = lastScannedData || {};
     if (d.orderNo) return `order:${d.orderNo}`;
     try {
@@ -5736,6 +6494,73 @@ function injectMacroModal() {
       if (sub?.textContent) return `patient:${String(sub.textContent).trim()}`;
     } catch (_) {}
     return "session:default";
+  }
+
+  const AI_HISTORY_STORE = "mg_ai_order_chats";
+
+  function loadAllAiHistories() {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([AI_HISTORY_STORE], (r) => {
+          resolve((r && r[AI_HISTORY_STORE] && typeof r[AI_HISTORY_STORE] === "object") ? r[AI_HISTORY_STORE] : {});
+        });
+      } catch (_) {
+        resolve({});
+      }
+    });
+  }
+
+  function slimAiTurn(turn) {
+    return {
+      role: turn?.role === "assistant" ? "assistant" : "user",
+      content: String(turn?.content || "").slice(0, 8000),
+    };
+  }
+
+  async function persistAiHistory(key) {
+    const storeKey = key || aiBoundKey || currentMacroSessionKey();
+    if (!storeKey) return;
+    const all = await loadAllAiHistories();
+    const previous = all[storeKey] || {};
+    const showing = aiResult && !aiResult.hidden ? String(aiResult.value || "").slice(0, 8000) : "";
+    all[storeKey] = {
+      chat: aiAskHistory.slice(-24).map(slimAiTurn),
+      draft: aiChatHistory.slice(-24).map(slimAiTurn),
+      mode: aiMode === "draft" ? "draft" : "chat",
+      lastChat: aiAskHistory.length ? (aiMode !== "draft" && showing ? showing : (previous.lastChat || "")) : "",
+      lastDraft: aiChatHistory.length ? (aiMode === "draft" && showing ? showing : (previous.lastDraft || "")) : "",
+      updatedAt: Date.now(),
+    };
+    const entries = Object.entries(all).sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0)).slice(0, 40);
+    const trimmed = Object.fromEntries(entries);
+    await new Promise((resolve) => {
+      try { chrome.storage.local.set({ [AI_HISTORY_STORE]: trimmed }, () => resolve()); }
+      catch (_) { resolve(); }
+    });
+  }
+
+  async function bindAiHistoryToOrder() {
+    const run = ++aiHistoryBind;
+    const key = currentMacroSessionKey();
+    if (key === aiBoundKey) return;
+    if (aiBoundKey) await persistAiHistory(aiBoundKey);
+    if (run !== aiHistoryBind) return;
+    const all = await loadAllAiHistories();
+    if (run !== aiHistoryBind) return;
+    aiBoundKey = key;
+    const saved = all[key] || {};
+    aiAskHistory = Array.isArray(saved.chat) ? saved.chat.map(slimAiTurn) : [];
+    aiChatHistory = Array.isArray(saved.draft) ? saved.draft.map(slimAiTurn) : [];
+    aiMode = saved.mode === "draft" ? "draft" : "chat";
+    aiAttachments = [];
+    aiHistoryLogOpen = true;
+    if (aiPrompt) aiPrompt.value = "";
+    hideAiResult();
+    if (aiMode === "draft" && saved.lastDraft) showAiResult(saved.lastDraft, "draft");
+    applyAiModeUi();
+    renderAiChatLog();
+    renderAiAttachments();
+    refreshAiStatusHint();
   }
 
   function saveMacroModalSession() {
@@ -5756,8 +6581,7 @@ function injectMacroModal() {
       macroSessionCache.orderKey = key;
       return false;
     }
-    customDetailMode = macroSessionCache.customDetailMode || "write";
-    aiChatHistory = macroSessionCache.aiChatHistory.slice();
+    customDetailMode = macroSessionCache.customDetailMode || "ai";
     if (aiPrompt) aiPrompt.value = macroSessionCache.aiPromptText || "";
     if (aiWebSearch) aiWebSearch.checked = macroSessionCache.webSearch !== false;
     if (macroSessionCache.customPreview && detailPreview) {
@@ -5778,13 +6602,13 @@ function injectMacroModal() {
     if (!aiStatus || selectedKey !== CUSTOM_MACRO_KEY || customDetailMode !== "ai") return;
     const { openaiKey, tavilyKey } = await getAiSettings();
     if (openaiKey && tavilyKey) {
-      setAiStatus(aiChatHistory.length
-        ? "Press Enter or Refine — web search enabled for UK clinical facts."
-        : "OpenAI + Tavily ready — searches NHS/NICE/SmPC sources automatically.");
+      setAiStatus(aiMode === "draft"
+        ? (aiChatHistory.length ? "Press Enter or Refine — web search is on for UK clinical facts." : "Draft email is on. Enter writes the patient message.")
+        : "Chat is on. Enter sends. Clinical questions are checked against NICE, NHS, and the SmPC.");
     } else if (openaiKey) {
-      setAiStatus(aiChatHistory.length
-        ? "Press Enter or Refine to improve the draft."
-        : "OpenAI ready — add Tavily API key in Settings for best web search.");
+      setAiStatus(aiMode === "draft"
+        ? (aiChatHistory.length ? "Press Enter or Refine to improve the draft." : "Draft email is on. Enter writes the patient message.")
+        : "Chat is on. Enter sends, and this order's consultation stays in the conversation.");
     } else {
       setAiStatus("Add your OpenAI API key in Settings → Save.", "error");
     }
@@ -6055,6 +6879,21 @@ function injectMacroModal() {
     }
     const chatSnippet = getRecentChatSnippet();
     if (chatSnippet) lines.push(`Recent patient chat:\n${chatSnippet}`);
+    const dossier = window.__mgOrderDossier;
+    if (dossier && dossier.text) {
+      lines.push("FULL ORDER RECORD (copied from the order tabs and from communications on this order and earlier orders — use these facts only):");
+      lines.push(String(dossier.text).slice(0, 14000));
+    }
+    const brief = window.__mgOrderBrief;
+    if (brief && Array.isArray(brief.points) && brief.points.length) {
+      lines.push("Points already taken from that record:");
+      brief.points.forEach((p) => {
+        const part = briefPointParts(p);
+        const bits = [part.when, part.order, part.where].filter(Boolean).join(", ");
+        const words = part.said ? `They said: ${part.said}` : part.text;
+        lines.push(`  - ${bits ? bits + " — " : ""}${words}`);
+      });
+    }
     return lines.join("\n");
   }
 
@@ -6080,9 +6919,43 @@ function injectMacroModal() {
     return s.slice(0, max - 1) + "…";
   }
 
+  function applyAiModeUi() {
+    if (aiModeEl) aiModeEl.dataset.mode = aiMode === "draft" ? "draft" : "chat";
+    if (aiModeChatBtn) aiModeChatBtn.classList.toggle("active", aiMode !== "draft");
+    if (aiModeDraftBtn) aiModeDraftBtn.classList.toggle("active", aiMode === "draft");
+    if (aiModeHint) {
+      aiModeHint.textContent = aiMode === "draft"
+        ? "Enter drafts the patient email. Shift+Enter for a new line."
+        : "Enter chats about this order. Shift+Enter for a new line.";
+    }
+    if (aiNewChatBtn) aiNewChatBtn.textContent = aiMode === "draft" ? "Clear draft" : "Clear chat";
+    if (aiDraftPanel) aiDraftPanel.hidden = aiMode !== "draft" || !aiResult || !String(aiResult.value || "").trim();
+    updateAiGenerateBtnLabel();
+  }
+
+  function setAiMode(mode) {
+    aiMode = mode === "draft" ? "draft" : "chat";
+    applyAiModeUi();
+    renderAiChatLog();
+    const remembered = aiMode === "chat"
+      ? (aiAskHistory.filter((turn) => turn.role === "assistant").slice(-1)[0]?.content || "")
+      : (aiChatHistory.filter((turn) => turn.role === "assistant").slice(-1)[0]?.content || "");
+    if (aiMode === "draft" && remembered) showAiResult(remembered, "draft");
+    else if (aiMode === "chat") hideAiResult();
+    else hideAiResult();
+    void persistAiHistory();
+    refreshAiStatusHint();
+  }
+
   function updateAiGenerateBtnLabel() {
     if (!aiGenerateBtn) return;
-    aiGenerateBtn.textContent = aiChatHistory.length ? "✨ Refine" : "✨ Generate";
+    if (aiMode !== "draft") {
+      aiGenerateBtn.textContent = "Send";
+      if (aiPromptLabel) aiPromptLabel.textContent = "Ask about this order";
+      if (aiPrompt) aiPrompt.placeholder = "Ask what the patient requested, or check a clinical point. Enter sends.";
+      return;
+    }
+    aiGenerateBtn.textContent = aiChatHistory.length ? "Refine" : "Generate";
     if (aiPromptLabel) {
       aiPromptLabel.textContent = aiChatHistory.length
         ? "Refine the draft"
@@ -6097,31 +6970,44 @@ function injectMacroModal() {
 
   function renderAiChatLog() {
     if (!aiChatLog) return;
-    if (!aiChatHistory.length) {
-      aiChatLog.hidden = true;
-      aiChatLog.innerHTML = "";
-      aiHistoryLogOpen = false;
-      if (aiHistoryToggle) {
-        aiHistoryToggle.hidden = true;
-        aiHistoryToggle.setAttribute("aria-expanded", "false");
-      }
+    const history = aiMode === "draft" ? aiChatHistory : aiAskHistory;
+    aiHistoryLogOpen = true;
+    if (aiHistoryToggle) {
+      aiHistoryToggle.hidden = true;
+      aiHistoryToggle.setAttribute("aria-expanded", "true");
+    }
+    if (aiHistoryCount) aiHistoryCount.textContent = String(Math.ceil(history.length / 2));
+    if (!history.length) {
+      aiChatLog.hidden = false;
+      aiChatLog.innerHTML = `<div class="mg-ai-chat-empty"><strong>${aiMode === "draft" ? "Draft a patient email" : "Chat about this order"}</strong>${aiMode === "draft" ? "Type instructions below. Drafts appear here on the left — yours on the right." : "Ask a clinical or order question. Your messages stay on the right; answers on the left."}</div>`;
       return;
     }
-    const exchangeCount = Math.ceil(aiChatHistory.length / 2);
-    if (aiHistoryToggle) {
-      aiHistoryToggle.hidden = false;
-      aiHistoryToggle.setAttribute("aria-expanded", aiHistoryLogOpen ? "true" : "false");
-    }
-    if (aiHistoryCount) aiHistoryCount.textContent = String(exchangeCount);
-    aiChatLog.innerHTML = aiChatHistory.map((turn) => {
-      const label = turn.role === "user" ? "You" : "Draft";
-      const preview = turn.role === "user"
-        ? truncateAiText(turn.content, 200)
-        : truncateAiText(turn.content, 120);
-      return `<div class="mg-ai-chat-turn ${turn.role}"><strong>${label}:</strong> ${esc(preview)}</div>`;
+    aiChatLog.innerHTML = history.map((turn) => {
+      const role = turn.role === "user" ? "user" : "assistant";
+      const label = role === "user" ? "You" : (aiMode === "draft" ? "Draft" : "AI");
+      const body = String(turn.content || "");
+      return `<div class="mg-ai-bubble-row ${role}"><div class="mg-ai-bubble"><span class="mg-ai-bubble-meta">${label}</span>${esc(body)}</div></div>`;
     }).join("");
-    aiChatLog.hidden = !aiHistoryLogOpen;
-    if (aiHistoryLogOpen) aiChatLog.scrollTop = aiChatLog.scrollHeight;
+    aiChatLog.hidden = false;
+    requestAnimationFrame(() => {
+      aiChatLog.scrollTop = aiChatLog.scrollHeight;
+    });
+  }
+
+  function showAiTyping() {
+    if (!aiChatLog) return;
+    const empty = aiChatLog.querySelector(".mg-ai-chat-empty");
+    if (empty) empty.remove();
+    const row = document.createElement("div");
+    row.className = "mg-ai-bubble-row assistant typing";
+    row.id = "mg-macro-ai-typing";
+    row.innerHTML = `<div class="mg-ai-bubble"><span class="mg-ai-bubble-meta">AI</span>Thinking…</div>`;
+    aiChatLog.appendChild(row);
+    aiChatLog.scrollTop = aiChatLog.scrollHeight;
+  }
+
+  function hideAiTyping() {
+    panel.querySelector("#mg-macro-ai-typing")?.remove();
   }
 
   function renderAiAttachments() {
@@ -6206,6 +7092,30 @@ function injectMacroModal() {
     try { return String(await file.text()).trim(); } catch (_) { return ""; }
   }
 
+  async function videoFileToFrameDataUrls(file) {
+    const objectUrl = URL.createObjectURL(file);
+    try {
+      const video = document.createElement("video");
+      video.preload = "auto";
+      video.muted = true;
+      video.playsInline = true;
+      video.src = objectUrl;
+      await new Promise((resolve, reject) => {
+        video.onloadeddata = () => resolve();
+        video.onerror = () => reject(new Error("Could not read video"));
+        setTimeout(() => resolve(), 2500);
+      });
+      const frames = [];
+      for (const ratio of [0.15, 0.5, 0.8]) {
+        const dataUrl = await mgVideoFrameToDataUrl(video, ratio);
+        if (dataUrl && dataUrl.length > 80 && dataUrl.length < 4_500_000) frames.push(dataUrl);
+      }
+      return frames;
+    } finally {
+      try { URL.revokeObjectURL(objectUrl); } catch (_) {}
+    }
+  }
+
   async function addAiFiles(fileList) {
     const files = [...(fileList || [])];
     for (const file of files) {
@@ -6220,6 +7130,27 @@ function injectMacroModal() {
           continue;
         }
         aiAttachments.push({ id, name, mediaType: file.type || "image/png", dataUrl, kind: "image" });
+        continue;
+      }
+      if (type.startsWith("video/") || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(name)) {
+        try {
+          const frames = await videoFileToFrameDataUrls(file);
+          if (!frames.length) {
+            setAiStatus(`${name}: could not read video frames.`, "error");
+            continue;
+          }
+          frames.forEach((dataUrl, idx) => {
+            aiAttachments.push({
+              id: `${id}-f${idx + 1}`,
+              name: `${name} (frame ${idx + 1})`,
+              mediaType: "image/jpeg",
+              dataUrl,
+              kind: "image",
+            });
+          });
+        } catch (_) {
+          setAiStatus(`${name}: could not read video.`, "error");
+        }
         continue;
       }
       const text = await readFileAsAiText(file);
@@ -6242,7 +7173,8 @@ function injectMacroModal() {
   }
 
   function resetAiChat() {
-    aiChatHistory = [];
+    if (aiMode === "draft") aiChatHistory = [];
+    else aiAskHistory = [];
     aiAttachments = [];
     aiHistoryLogOpen = false;
     if (aiPrompt) aiPrompt.value = "";
@@ -6254,9 +7186,11 @@ function injectMacroModal() {
     macroSessionCache.aiChatHistory = [];
     macroSessionCache.aiDraft = "";
     macroSessionCache.aiPromptText = "";
+    void persistAiHistory();
   }
 
   async function generateEmailWithAI(payload) {
+    try { await buildOrderDossier(false); } catch (_) {}
     return new Promise((resolve, reject) => {
       try {
         chrome.runtime.sendMessage({
@@ -6301,22 +7235,44 @@ function injectMacroModal() {
     }
   }
 
-  function showAiResult(text) {
+  let aiResultMode = "draft";
+
+  function showAiResult(text, mode) {
+    aiResultMode = mode === "answer" ? "answer" : "draft";
+    if (aiResultMode === "answer") {
+      if (aiDraftPanel) aiDraftPanel.hidden = true;
+      if (aiResult) aiResult.value = "";
+      if (aiResultActions) aiResultActions.hidden = true;
+      return;
+    }
     if (aiResult) {
       aiResult.value = text;
       aiResult.hidden = false;
     }
-    if (aiResultLabel) aiResultLabel.hidden = false;
+    if (aiDraftPanel) aiDraftPanel.hidden = false;
+    if (aiResultLabel) {
+      aiResultLabel.hidden = false;
+      aiResultLabel.textContent = "Current draft — edit before sending";
+    }
     if (aiResultActions) aiResultActions.hidden = false;
+    if (aiUseEditorBtn) aiUseEditorBtn.hidden = false;
+    if (aiInsertChatBtn) aiInsertChatBtn.hidden = false;
   }
 
   function hideAiResult() {
+    aiResultMode = "draft";
     if (aiResult) {
       aiResult.value = "";
-      aiResult.hidden = true;
+      aiResult.hidden = false;
     }
-    if (aiResultLabel) aiResultLabel.hidden = true;
+    if (aiDraftPanel) aiDraftPanel.hidden = true;
+    if (aiResultLabel) {
+      aiResultLabel.hidden = false;
+      aiResultLabel.textContent = "Current draft — edit before sending";
+    }
     if (aiResultActions) aiResultActions.hidden = true;
+    if (aiUseEditorBtn) aiUseEditorBtn.hidden = false;
+    if (aiInsertChatBtn) aiInsertChatBtn.hidden = false;
   }
 
   function setAiStatus(text, kind) {
@@ -6338,32 +7294,49 @@ function injectMacroModal() {
     if (aiGenerateBtn) aiGenerateBtn.disabled = true;
     const isRefine = aiChatHistory.length > 0;
     setAiStatus(isRefine ? "Refining draft…" : (aiWebSearch?.checked ? "Searching web & drafting…" : "Generating draft…"));
+    if (userMessage) {
+      aiChatHistory.push({ role: "user", content: userMessage });
+    } else if (aiAttachments.length) {
+      aiChatHistory.push({ role: "user", content: `[Attached ${aiAttachments.length} file(s)]` });
+    }
+    aiPrompt.value = "";
+    renderAiChatLog();
+    showAiTyping();
     try {
-      const attachmentsPayload = aiAttachments.map(({ name, mediaType, dataUrl, text, kind }) => ({
-        name, mediaType, dataUrl, text, kind,
-      }));
+      let dossierImages = [];
+      try {
+        const dossier = await buildOrderDossier(false);
+        dossierImages = (dossier?.images || []).slice(0, 6);
+      } catch (_) {}
+      const attachmentsPayload = [
+        ...dossierImages,
+        ...aiAttachments.map(({ name, mediaType, dataUrl, text, kind }) => ({
+          name, mediaType, dataUrl, text, kind,
+        })),
+      ].slice(0, 8);
       const draft = await generateEmailWithAI({
-        userMessage: userMessage || "Use the attached file(s) to draft the patient message.",
-        history: aiChatHistory,
+        userMessage: userMessage || "Use the attached file(s) and order documents/videos to draft the patient message.",
+        history: aiChatHistory.slice(0, -1),
         attachments: attachmentsPayload,
         webSearch: aiWebSearch?.checked,
       });
-      if (userMessage) {
-        aiChatHistory.push({ role: "user", content: userMessage });
-      } else if (aiAttachments.length) {
-        aiChatHistory.push({ role: "user", content: `[Attached ${aiAttachments.length} file(s)]` });
-      }
+      hideAiTyping();
       aiChatHistory.push({ role: "assistant", content: draft });
-      aiPrompt.value = "";
       aiAttachments = [];
       renderAiAttachments();
       renderAiChatLog();
       showAiResult(draft);
       updateAiGenerateBtnLabel();
       saveMacroModalSession();
+      void persistAiHistory();
       setAiStatus("Draft ready — type another note below to refine, or use in editor.", "success");
       aiPrompt.focus();
     } catch (e) {
+      hideAiTyping();
+      if (aiChatHistory.length && aiChatHistory[aiChatHistory.length - 1]?.role === "user") {
+        aiChatHistory.pop();
+        renderAiChatLog();
+      }
       setAiStatus(e?.message || "Generation failed.", "error");
     } finally {
       aiGenerating = false;
@@ -6507,8 +7480,8 @@ function injectMacroModal() {
         detailPreview.value = fillPlaceholders(m.body);
         detailPreview.dataset.macroKey = selectedKey;
         if (selectedKey === CUSTOM_MACRO_KEY && macroSessionCache.orderKey !== currentMacroSessionKey()) {
-          customDetailMode = "write";
-          resetAiChat();
+          customDetailMode = "ai";
+          void bindAiHistoryToOrder();
         }
       }
     }
@@ -6517,7 +7490,7 @@ function injectMacroModal() {
     if (customTabs) customTabs.hidden = !isCustom;
     if (isCustom) {
       restoreMacroModalSession();
-      if (customDetailMode !== "write" && customDetailMode !== "ai") customDetailMode = "write";
+      if (customDetailMode !== "write" && customDetailMode !== "ai") customDetailMode = "ai";
       setCustomDetailMode(customDetailMode);
       refreshAiStatusHint();
     } else {
@@ -6671,6 +7644,9 @@ function injectMacroModal() {
     if (selectedKey === CUSTOM_MACRO_KEY || !selectedKey) {
       restoreMacroModalSession();
     }
+    selectedKey = CUSTOM_MACRO_KEY;
+    customDetailMode = "ai";
+    setCustomDetailMode("ai", { focus: true });
   }
 
   async function refreshMacroData() {
@@ -6682,14 +7658,219 @@ function injectMacroModal() {
     renderList();
   }
 
+  let sidebarOpen = false;
+  const sidebarToggle = panel.querySelector("#mg-macro-sidebar-toggle");
+  const aiContextBox = panel.querySelector("#mg-macro-ai-context");
+  const aiContextBody = panel.querySelector("#mg-macro-ai-context-body");
+  const aiContextRefresh = panel.querySelector("#mg-macro-ai-context-refresh");
+  const aiTools = panel.querySelector("#mg-macro-ai-tools");
+  panel.classList.add("sidebar-closed");
+
+  function setSidebarOpen(open) {
+    sidebarOpen = !!open;
+    panel.classList.toggle("sidebar-closed", !sidebarOpen);
+    if (sidebarToggle) {
+      sidebarToggle.setAttribute("aria-expanded", sidebarOpen ? "true" : "false");
+      sidebarToggle.textContent = sidebarOpen ? "Hide templates" : "Templates";
+    }
+  }
+
+  const AI_TOOL_PROMPTS = {
+    tracking: "The patient says the order has not been received, or is asking about tracking. Use the tracking number and Royal Mail link from the messages. If a live Royal Mail status was read, tell them that status. If it was not read, still give the number and the link, and do not guess whether it was delivered.",
+    dose: "Use the dates and consultation answers in the order record. If the last fulfilled order leaves a gap and the patient mentions a recent injection, ask whether another provider supplied it. Do not invent dates or doses.",
+    side: "Mention a side effect only if monitoring, a note, or a patient message names it. Do not add effects they did not report.",
+    id: "Mention documents only if a readable photo disagrees with the patient name or the weight written on the order. If the photos were not readable, or they match, do not mention ID or photos.",
+  };
+
+  let briefRun = 0;
+
+  function briefPointParts(point) {
+    if (point && typeof point === "object") {
+      let order = String(point.order || "").trim();
+      if (order && !order.startsWith("#") && /\d/.test(order)) order = "#" + order.replace(/^#/, "");
+      return {
+        when: String(point.when || "").trim(),
+        order,
+        where: String(point.where || point.source || "").trim(),
+        text: String(point.text || point.fact || "").trim(),
+        said: String(point.said || point.quote || "").trim(),
+      };
+    }
+    return { when: "", order: "", where: "", text: String(point || "").trim(), said: "" };
+  }
+
+  function renderOrderBrief(brief) {
+    if (!aiContextBox || !aiContextBody) return;
+    const points = brief && Array.isArray(brief.points)
+      ? brief.points.map(briefPointParts).filter((p) => p.text || p.said)
+      : [];
+    if (!brief || !brief.relevant || !points.length) {
+      aiContextBox.hidden = true;
+      aiContextBody.replaceChildren();
+      return;
+    }
+    aiContextBox.hidden = false;
+    aiContextBody.replaceChildren();
+    points.slice(0, 5).forEach((point) => {
+      const card = document.createElement("article");
+      card.className = "mg-ai-context-card";
+      const meta = document.createElement("div");
+      meta.className = "mg-ai-context-meta";
+      const chips = [
+        ["mg-ai-context-when", point.when],
+        ["mg-ai-context-order", point.order ? (point.order.toLowerCase().startsWith("order") ? point.order : "Order " + point.order) : ""],
+        ["mg-ai-context-where", point.where],
+      ];
+      chips.forEach(([cls, label]) => {
+        if (!label) return;
+        const chip = document.createElement("span");
+        chip.className = cls;
+        chip.textContent = label;
+        meta.appendChild(chip);
+      });
+      if (meta.childNodes.length) card.appendChild(meta);
+      if (point.text && point.text !== point.said) {
+        const topic = document.createElement("p");
+        topic.className = "mg-ai-context-text";
+        topic.textContent = point.text;
+        card.appendChild(topic);
+      }
+      const said = document.createElement("div");
+      said.className = "mg-ai-context-said";
+      const saidLabel = document.createElement("span");
+      saidLabel.className = "mg-ai-context-said-label";
+      saidLabel.textContent = /note/i.test(point.where) ? "Note" : "They said";
+      const saidText = document.createElement("p");
+      saidText.className = "mg-ai-context-said-text";
+      saidText.textContent = point.said || point.text;
+      said.appendChild(saidLabel);
+      said.appendChild(saidText);
+      card.appendChild(said);
+      aiContextBody.appendChild(card);
+    });
+  }
+
+  async function refreshOrderBrief(force) {
+    const run = ++briefRun;
+    const orderKey = currentMacroSessionKey() + "|" + location.pathname;
+    if (!force && window.__mgOrderBrief && window.__mgOrderBrief.key === orderKey) {
+      renderOrderBrief(window.__mgOrderBrief);
+      return;
+    }
+    if (aiContextBox && aiContextBody) {
+      aiContextBox.hidden = false;
+      aiContextBody.replaceChildren();
+      const loading = document.createElement("p");
+      loading.className = "mg-ai-context-loading";
+      loading.textContent = "Reading this order…";
+      aiContextBody.appendChild(loading);
+    }
+    let dossier = null;
+    try {
+      dossier = await buildOrderDossier(!!force);
+    } catch (_) {
+      dossier = null;
+    }
+    if (run !== briefRun) return;
+    if (!dossier || (!dossier.text && !(dossier.images || []).length)) {
+      if (aiContextBox) aiContextBox.hidden = true;
+      setAiStatus("Could not read this order's tabs.", "error");
+      return;
+    }
+    const settings = await getAiSettings();
+    if (!settings.openaiKey && !settings.serverUrl) {
+      if (aiContextBox) aiContextBox.hidden = true;
+      setAiStatus("Order is on the page. Add an OpenAI key in Settings to summarise the messages.", "error");
+      return;
+    }
+    if (/has not received the order, or is asking where it is/.test(dossier.text) && /Tracking numbers:|royalmail\.com/i.test(dossier.text)) {
+      setAiStatus("Checking the tracking number with Royal Mail…");
+      const loading = aiContextBody && aiContextBody.querySelector(".mg-ai-context-loading");
+      if (loading) loading.textContent = "Checking the tracking number with Royal Mail…";
+    }
+    chrome.runtime.sendMessage({
+      type: "SUMMARISE_ORDER_CONTEXT",
+      context: dossier.text,
+      orderNo: (lastScannedData && lastScannedData.orderNo) || "",
+      orderDate: (lastScannedData && lastScannedData.orderDate) || "",
+      attachments: (dossier.images || []).slice(0, 6),
+    }, (resp) => {
+      if (run !== briefRun) return;
+      if (chrome.runtime.lastError || !resp?.success) {
+        if (aiContextBox) aiContextBox.hidden = true;
+        return;
+      }
+      const brief = mgEnsureDeliveryBrief(resp.brief || { relevant: false, points: [] }, dossier.text);
+      brief.key = orderKey;
+      window.__mgOrderBrief = brief;
+      renderOrderBrief(brief);
+      if (!brief.relevant) {
+        setAiStatus(dossier.commsFound
+          ? "Order read. No open question in the messages."
+          : "Order tabs read. The message thread was not on the page.");
+      }
+      maybeAutoDraftTracking(dossier.text);
+    });
+  }
+
+  function mgEnsureDeliveryBrief(brief, dossierText) {
+    const text = String(dossierText || "");
+    const complaint = /has not received the order, or is asking where it is/.test(text);
+    if (!complaint) return brief;
+    const numbers = (text.match(/Tracking numbers: ([^\n]+)/) || [])[1] || "";
+    const link = (text.match(/https?:\/\/\S*(?:royalmail|parcelforce)\S*/i) || [])[0] || "";
+    const quote = (text.match(/Patient wording: ([^\n]+)/) || [])[1] || "";
+    const lookup = (text.match(/Tracking [A-Z0-9]+ — ([^\n]+)/) || [])[1] || "";
+    const already = (brief.points || []).some((point) => /track|receiv|deliver|parcel|royal mail/i.test(`${point.text} ${point.said}`));
+    if (brief.relevant && already) return brief;
+    const point = {
+      when: "",
+      order: "",
+      where: "Messages",
+      text: "Not received" + (numbers ? " — " + numbers : ""),
+      said: quote || ("The patient says this order has not been received."
+        + (link ? " Tracking link on the thread: " + link : "")
+        + (lookup ? " " + lookup : "")),
+    };
+    return {
+      relevant: true,
+      points: [point, ...(brief.points || [])].slice(0, 5),
+    };
+  }
+
+  function maybeAutoDraftTracking(dossierText) {
+    const text = String(dossierText || "");
+    if (!/has not received the order, or is asking where it is/.test(text)) return;
+    if (!/Tracking numbers:|royalmail\.com|parcelforce\.com/i.test(text)) return;
+    const key = currentMacroSessionKey() + "|" + location.pathname;
+    if (window.__mgAutoTrackDraft === key) return;
+    if (aiGenerating || aiChatHistory.length) return;
+    if (aiResult && String(aiResult.value || "").trim()) return;
+    if (aiPrompt && String(aiPrompt.value || "").trim()) return;
+    window.__mgAutoTrackDraft = key;
+    if (aiPrompt) {
+      aiPrompt.value = "The patient says they have not received this order. Use the exact tracking number and Royal Mail link copied from the messages. If a live Royal Mail status was read, tell them that status in plain words. If it was not read, still give the number and the link, and do not guess whether it was delivered.";
+    }
+    if (aiWebSearch) aiWebSearch.checked = true;
+    runAiGenerate();
+  }
+
   function openPanel() {
     placeMacroTab();
     drawer.classList.add("open");
     panel.classList.add("open");
     panel.setAttribute("aria-hidden", "false");
     tab.setAttribute("aria-expanded", "true");
+    backdrop.classList.add("open");
     setCatNavOpen(false);
-    setTimeout(() => searchEl.focus(), 80);
+    setSidebarOpen(false);
+    selectedKey = CUSTOM_MACRO_KEY;
+    customDetailMode = "ai";
+    updateCustomBtnActive();
+    renderList();
+    renderDetail();
+    setCustomDetailMode("ai", { focus: true });
+    refreshOrderBrief(false);
   }
 
   function closePanel() {
@@ -6698,6 +7879,7 @@ function injectMacroModal() {
     panel.classList.remove("open");
     panel.setAttribute("aria-hidden", "true");
     tab.setAttribute("aria-expanded", "false");
+    backdrop.classList.remove("open");
   }
 
   window.__mgOpenMacroModal = openMacrosOnlyModal;
@@ -6707,6 +7889,133 @@ function injectMacroModal() {
     panel.classList.contains("open") ? closePanel() : openMacrosOnlyModal();
   });
   backdrop.addEventListener("click", closePanel);
+  if (sidebarToggle) {
+    sidebarToggle.addEventListener("click", () => setSidebarOpen(!sidebarOpen));
+  }
+  const aiSummaryBtn = panel.querySelector("#mg-macro-ai-summary");
+  const aiOverviewBox = panel.querySelector("#mg-macro-ai-overview");
+  const aiOverviewBody = panel.querySelector("#mg-macro-ai-overview-body");
+  const aiAskBtn = panel.querySelector("#mg-macro-ai-ask");
+
+  function renderOrderOverview(text) {
+    if (!aiOverviewBox || !aiOverviewBody) return;
+    aiOverviewBox.hidden = false;
+    aiOverviewBody.textContent = text || "";
+  }
+
+  async function loadOrderOverview() {
+    const key = currentMacroSessionKey() + "|" + location.pathname;
+    if (window.__mgOrderOverview && window.__mgOrderOverview.key === key && window.__mgOrderOverview.text) {
+      renderOrderOverview(window.__mgOrderOverview.text);
+      return;
+    }
+    if (aiSummaryBtn) aiSummaryBtn.disabled = true;
+    renderOrderOverview("Reading the whole order…");
+    let dossier = null;
+    try { dossier = await buildOrderDossier(false); } catch (_) { dossier = null; }
+    if (!dossier || !dossier.text) {
+      renderOrderOverview("The order tabs were not on the page, so there is nothing to summarise yet.");
+      if (aiSummaryBtn) aiSummaryBtn.disabled = false;
+      return;
+    }
+    chrome.runtime.sendMessage({
+      type: "SUMMARISE_ORDER_OVERVIEW",
+      context: dossier.text,
+      orderNo: (lastScannedData && lastScannedData.orderNo) || "",
+      orderDate: (lastScannedData && lastScannedData.orderDate) || "",
+    }, (resp) => {
+      if (aiSummaryBtn) aiSummaryBtn.disabled = false;
+      if (chrome.runtime.lastError || !resp?.success || !resp.text) {
+        renderOrderOverview(resp?.error || "Could not summarise this order.");
+        return;
+      }
+      window.__mgOrderOverview = { key, text: resp.text };
+      renderOrderOverview(resp.text);
+    });
+  }
+
+  async function runAiAsk() {
+    if (aiGenerating || !aiPrompt) return;
+    const question = aiPrompt.value.trim();
+    if (!question && !aiAttachments.length) {
+      setAiStatus("Type a question about this order.", "error");
+      aiPrompt.focus();
+      return;
+    }
+    const asked = question || "Review the attached files and the order documents/videos.";
+    aiGenerating = true;
+    if (aiAskBtn) aiAskBtn.disabled = true;
+    if (aiGenerateBtn) aiGenerateBtn.disabled = true;
+    setAiStatus(aiWebSearch?.checked ? "Reading this order (including documents/videos) and checking NICE, NHS, and the SmPC…" : "Reading this order, documents, and videos…");
+    aiAskHistory.push({ role: "user", content: asked });
+    if (aiPrompt) aiPrompt.value = "";
+    aiHistoryLogOpen = true;
+    renderAiChatLog();
+    showAiTyping();
+    try {
+      let dossier = null;
+      try { dossier = await buildOrderDossier(true); } catch (_) { dossier = null; }
+      const overview = (window.__mgOrderOverview && window.__mgOrderOverview.text) || "";
+      const attachmentsPayload = [
+        ...((dossier && dossier.images) || []).slice(0, 6),
+        ...aiAttachments.map(({ name, mediaType, dataUrl, text, kind }) => ({
+          name, mediaType, dataUrl, text, kind,
+        })),
+      ].slice(0, 8);
+      const answer = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: "ASK_ABOUT_ORDER",
+          question: asked,
+          history: aiAskHistory.slice(0, -1),
+          attachments: attachmentsPayload,
+          webSearch: !!aiWebSearch?.checked,
+          context: buildEmailAiContext(),
+          overview,
+        }, (resp) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || "Extension error"));
+            return;
+          }
+          if (resp?.success && resp.text) resolve(resp.text);
+          else reject(new Error(resp?.error || "Could not answer."));
+        });
+      });
+      hideAiTyping();
+      aiAskHistory.push({ role: "assistant", content: answer });
+      aiAttachments = [];
+      renderAiAttachments();
+      renderAiChatLog();
+      showAiResult(answer, "answer");
+      void persistAiHistory();
+      setAiStatus("Answer ready. Nothing was sent.", "success");
+    } catch (e) {
+      hideAiTyping();
+      if (aiAskHistory.length && aiAskHistory[aiAskHistory.length - 1]?.role === "user") {
+        aiAskHistory.pop();
+        renderAiChatLog();
+      }
+      setAiStatus(e?.message || "Could not answer.", "error");
+    } finally {
+      aiGenerating = false;
+      if (aiAskBtn) aiAskBtn.disabled = false;
+      if (aiGenerateBtn) aiGenerateBtn.disabled = false;
+    }
+  }
+
+  if (aiContextRefresh) {
+    aiContextRefresh.addEventListener("click", () => refreshOrderBrief(true));
+  }
+  if (aiTools) {
+    aiTools.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-ai-tool]");
+      if (!btn || !aiPrompt) return;
+      const text = AI_TOOL_PROMPTS[btn.dataset.aiTool];
+      if (!text) return;
+      aiPrompt.value = text;
+      aiPrompt.focus();
+      saveMacroModalSession();
+    });
+  }
   closeBtn.addEventListener("click", closePanel);
   if (customBtn) {
     customBtn.addEventListener("click", () => {
@@ -6743,7 +8052,14 @@ function injectMacroModal() {
   });
   copyBtn.addEventListener("click", copySelected);
   insertBtn.addEventListener("click", insertIntoChat);
-  if (aiGenerateBtn) aiGenerateBtn.addEventListener("click", runAiGenerate);
+  if (aiGenerateBtn) aiGenerateBtn.addEventListener("click", () => {
+    if (aiMode === "draft") runAiGenerate();
+    else runAiAsk();
+  });
+  if (aiAskBtn) aiAskBtn.addEventListener("click", runAiAsk);
+  if (aiModeChatBtn) aiModeChatBtn.addEventListener("click", () => setAiMode("chat"));
+  if (aiModeDraftBtn) aiModeDraftBtn.addEventListener("click", () => setAiMode("draft"));
+  if (aiSummaryBtn) aiSummaryBtn.addEventListener("click", () => loadOrderOverview());
   if (aiNewChatBtn) aiNewChatBtn.addEventListener("click", resetAiChat);
   if (aiHistoryToggle) {
     aiHistoryToggle.addEventListener("click", () => {
@@ -6790,7 +8106,8 @@ function injectMacroModal() {
     aiPrompt.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
       e.preventDefault();
-      runAiGenerate();
+      if (aiMode === "draft") runAiGenerate();
+      else runAiAsk();
     });
     aiPrompt.addEventListener("paste", (e) => {
       const items = e.clipboardData?.items;
@@ -6808,18 +8125,34 @@ function injectMacroModal() {
       }
     });
   }
+  function openAiFilePicker() {
+    aiFileInput.click();
+  }
+  if (aiAttachBtn) aiAttachBtn.addEventListener("click", openAiFilePicker);
   if (aiDropzone) {
-    aiDropzone.addEventListener("click", () => aiFileInput.click());
-    aiDropzone.addEventListener("dragover", (e) => {
+    aiDropzone.addEventListener("click", openAiFilePicker);
+  }
+  if (aiComposer) {
+    aiComposer.addEventListener("dragover", (e) => {
       e.preventDefault();
-      aiDropzone.classList.add("dragover");
+      aiComposer.classList.add("dragover");
     });
-    aiDropzone.addEventListener("dragleave", () => aiDropzone.classList.remove("dragover"));
-    aiDropzone.addEventListener("drop", (e) => {
+    aiComposer.addEventListener("dragleave", (e) => {
+      if (!aiComposer.contains(e.relatedTarget)) aiComposer.classList.remove("dragover");
+    });
+    aiComposer.addEventListener("drop", (e) => {
       e.preventDefault();
-      aiDropzone.classList.remove("dragover");
+      aiComposer.classList.remove("dragover");
       addAiFiles(e.dataTransfer?.files);
     });
+  }
+  if (aiPrompt) {
+    const resizePrompt = () => {
+      aiPrompt.style.height = "auto";
+      aiPrompt.style.height = `${Math.min(120, Math.max(44, aiPrompt.scrollHeight))}px`;
+    };
+    aiPrompt.addEventListener("input", resizePrompt);
+    resizePrompt();
   }
   if (aiFileInput) {
     aiFileInput.addEventListener("change", () => {
@@ -6857,6 +8190,9 @@ function injectMacroModal() {
   window.__mgMacroKeydown = _keydownHandler;
 
   refreshMacroData();
+  window.__mgSwitchAiOrder = () => { void bindAiHistoryToOrder(); };
+  void bindAiHistoryToOrder();
+  applyAiModeUi();
 
   if (!window.__mgMacroStorageListenerInstalled) {
     try {

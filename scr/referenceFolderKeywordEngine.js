@@ -82,7 +82,8 @@ function findKeywordMatches(text, keyword, options = {}) {
   const hits = [];
   const lowerText = text.toLowerCase();
   const lowerKeyword = keyword.toLowerCase();
-  const useWholeWord = Boolean(options.wholeWord) || isShortAbbreviation(keyword);
+  // A space in the keyword is a phrase ("MEN 2"), never a substring of "abdomen 20".
+  const useWholeWord = Boolean(options.wholeWord) || isShortAbbreviation(keyword) || /\s/.test(keyword);
 
   if (useWholeWord) {
     const escaped = lowerKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -384,6 +385,40 @@ function isExcludedHit(rule, text, hit) {
   return false;
 }
 
+/**
+ * Text of the same SCR row as the hit: after the previous row date and before the next one.
+ * Stops a keyword from being judged using the neighbouring row.
+ */
+function sameRowSlice(text, hit) {
+  const hitStart = hit.index;
+  const hitEnd = hit.index + (hit.actualMatch?.length || 0);
+  let rowStart = 0;
+  let rowEnd = text.length;
+  const re = new RegExp(SCR_DATE_RE.source, 'gi');
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const dateStart = m.index;
+    const dateEnd = m.index + m[0].length;
+    if (dateEnd <= hitStart) rowStart = dateEnd;
+    else if (dateStart >= hitEnd) {
+      rowEnd = dateStart;
+      break;
+    }
+  }
+  return text.slice(rowStart, rowEnd);
+}
+
+/**
+ * A hit on a negative or normal result is not a diagnosis.
+ * "AKI Stage NA - No Flag", "staging not applicable", "neoplasm screening normal".
+ */
+const NEGATIVE_RESULT_RE =
+  /\b(not applicable|no flag(?:\s+alert)?|stage\s*na\b|staging not applicable|screening normal|normal screening)\b/i;
+
+function isNegativeResult(text, hit) {
+  return NEGATIVE_RESULT_RE.test(sameRowSlice(text, hit));
+}
+
 /** For allergy-style rules: the drug name must sit near allergy wording. */
 function hasNearbyTerm(rule, text, hit) {
   const near = rule.require_nearby;
@@ -424,7 +459,7 @@ function resolveHlAction(rule, extra = {}, ctx = {}) {
 function pushFinding(findings, rule, keyword, text, hit, occurrence, extra = {}, conditionId = '') {
   const isHl = isStructuredRule(rule);
   if (isHl && !extra.keepNegated) {
-    if (isExcludedHit(rule, text, hit) || !hasNearbyTerm(rule, text, hit)) return;
+    if (isExcludedHit(rule, text, hit) || !hasNearbyTerm(rule, text, hit) || isNegativeResult(text, hit)) return;
   }
   const ctx = classifyContext(rule, text, hit.index);
   if (isHl && ctx.negated && !ctx.uncertain && !extra.keepNegated) {
@@ -901,6 +936,10 @@ export function scanReferenceFolderKeywords(text, rules, options = {}) {
     findings,
     ...(productVerdicts ? { productVerdicts } : {}),
   };
+}
+
+if (typeof globalThis !== 'undefined') {
+  globalThis.scanReferenceFolderKeywords = scanReferenceFolderKeywords;
 }
 
 /**

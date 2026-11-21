@@ -34,6 +34,24 @@ function bindPanelToTab(tab) {
   panelBoundOrderPath = orderPathFromUrl(tab.url);
   return true;
 }
+function setEmptyCopy(title, sub) {
+  const titleEl = document.querySelector("#wf-empty .empty-title");
+  const subEl = document.querySelector("#wf-empty .empty-sub");
+  if (titleEl) titleEl.textContent = title;
+  if (subEl) subEl.textContent = sub;
+}
+function followOrderTab(tab) {
+  if (!tab?.id || !isRxOrderUrl(tab.url)) return;
+  const path = orderPathFromUrl(tab.url);
+  const changed = panelBoundTabId !== tab.id || panelBoundOrderPath !== path;
+  bindPanelToTab(tab);
+  if (changed) {
+    currentOrderData = null;
+    showWorkflow(null);
+    setEmptyCopy("Loading patient…", "Reading this order.");
+  }
+  [200, 700, 1500, 3000, 5000].forEach((ms) => setTimeout(() => doScan({ quiet: true }), ms));
+}
 const hostWindowId = Number(new URLSearchParams(location.search).get("hostWindow")) || null;
 function queryActiveTab() {
   return new Promise((resolve) => {
@@ -2052,7 +2070,7 @@ async function sendChat(text) {
 async function doScan(options = {}) {
   const quiet = options.quiet === true;
   const handle = (resp) => {
-    if (resp && resp.data) {
+    if (resp && resp.data && (resp.data.patientName || resp.data.orderNo)) {
       currentOrderData = resp.data;
       renderBanner(currentOrderData);
       showWorkflow(currentOrderData);
@@ -2158,16 +2176,8 @@ document.addEventListener("DOMContentLoaded", () => {
           refreshQueueContext().then(updateQueueActionButtons).catch(() => {});
           return;
         }
-        bindPanelToTab(tab);
         updateQueueActionButtons({ isQueue: false });
-        chrome.tabs.sendMessage(tabId, { type: "GET_SCAN_DATA" })
-          .then((resp) => {
-            if (!resp?.data) return;
-            currentOrderData = resp.data;
-            renderBanner(currentOrderData);
-            showWorkflow(currentOrderData);
-          })
-          .catch(() => {});
+        followOrderTab(tab);
       });
     });
   }
@@ -2188,6 +2198,12 @@ document.addEventListener("DOMContentLoaded", () => {
           : "";
       }
       }
+    }
+    if (msg.type === "ORDER_URL_CHANGED") {
+      const url = msg.url || msg.tabUrl;
+      if (!msg.tabId || !isRxOrderUrl(url)) return;
+      if (panelBoundTabId != null && msg.tabId !== panelBoundTabId) return;
+      followOrderTab({ id: msg.tabId, url });
     }
     if (msg.type === "ORDER_DATA_SCANNED" && msg.data) {
       if (!scanMessageFromBoundTab(msg)) return;
@@ -2253,10 +2269,17 @@ document.addEventListener("DOMContentLoaded", () => {
   [400, 1200, 2500, 5000].forEach((ms) => setTimeout(() => doScan({ quiet: true }), ms));
   if (chrome.tabs?.onUpdated) {
     chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
-      if (info.status !== "complete" || !isRxOrderUrl(tab?.url)) return;
-      if (panelBoundTabId != null && tabId !== panelBoundTabId) return;
-      bindPanelToTab(tab);
-      setTimeout(() => doScan({ quiet: true }), 300);
+      if (!info.url && info.status !== "complete") return;
+      const url = info.url || tab?.url;
+      if (!isRxOrderUrl(url)) return;
+      const apply = () => followOrderTab({ id: tabId, url });
+      if (panelBoundTabId == null || tabId === panelBoundTabId) {
+        apply();
+        return;
+      }
+      queryActiveTab().then((active) => {
+        if (active?.id === tabId) apply();
+      });
     });
   }
 });

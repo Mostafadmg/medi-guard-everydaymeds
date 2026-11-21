@@ -1119,15 +1119,17 @@
       .split(/[\s-]+/)
       .filter((word) => word.length > 3);
 
+    // SCR rows are date, then the description. The date on this row is the
+    // last date before the keyword, not the date that starts the next row.
     for (const word of titleWords) {
       const wordIndex = snippetLower.indexOf(word);
       if (wordIndex < 0) continue;
 
-      const after = dates.find((entry) => entry.index >= wordIndex);
-      if (after) return after.raw;
-
       const before = dates.filter((entry) => entry.index < wordIndex);
       if (before.length) return before[before.length - 1].raw;
+
+      const after = dates.find((entry) => entry.index >= wordIndex);
+      if (after) return after.raw;
     }
 
     let latestRaw = dates[0].raw;
@@ -1242,9 +1244,12 @@
       }
     }
 
-    for (let i = 1; i < cells.length; i += 1) {
-      const dateText = cells[i].querySelector('p')?.textContent?.trim() || '';
-      if (dateText && dateText !== '—' && /\d/.test(dateText)) return dateText;
+    const dateShaped = (value) => /^\d{1,2}[-/\s][A-Za-z]{3,9}[-/\s]\d{2,4}$/.test(value)
+      || /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(value)
+      || /^\d{4}-\d{2}-\d{2}$/.test(value);
+    for (const cell of cells) {
+      const dateText = cell.querySelector('p')?.textContent?.trim() || '';
+      if (dateShaped(dateText)) return dateText;
     }
 
     return null;
@@ -1254,16 +1259,27 @@
     return document.querySelector('#root .sticky.top-4 .space-y-4');
   }
 
+  function getFindingProseRoot() {
+    return document.querySelector('#root .prose') || document.getElementById('root');
+  }
+
   function getFindingIndex(card) {
+    if (!card) return null;
+    if (card.dataset.edmFindingIndex != null && card.dataset.edmFindingIndex !== '') {
+      const stored = parseInt(card.dataset.edmFindingIndex, 10);
+      if (!Number.isNaN(stored)) return stored;
+    }
     const list = getFindingCardsList();
     if (!list) return null;
+    // Include hidden duplicates so indices stay aligned with React's findings[] index.
     const cards = Array.from(list.querySelectorAll(':scope > .bg-red-50.cursor-pointer'));
     const idx = cards.indexOf(card);
     return idx >= 0 ? idx : null;
   }
 
   function getFindingMark(findingIndex) {
-    const root = document.querySelector('#root .prose') || document.getElementById('root');
+    const root = getFindingProseRoot();
+    if (findingIndex == null || Number.isNaN(findingIndex)) return null;
     return root?.querySelector(`#finding-${findingIndex}`) || null;
   }
 
@@ -1277,12 +1293,198 @@
     document.querySelectorAll('#root tr.edm-finding-row-active').forEach((row) => {
       row.classList.remove('edm-finding-row-active');
     });
+    document.querySelectorAll('#root mark.edm-finding-mark-active').forEach((mark) => {
+      mark.classList.remove('edm-finding-mark-active');
+    });
+  }
+
+  function normalizeFindText(value) {
+    return String(value || '')
+      .toLowerCase()
+      .replace(/[\u00a0\s]+/g, ' ')
+      .trim();
+  }
+
+  function getFindingKeyword(card) {
+    const title = card.dataset.edmFindingTitle
+      || (() => {
+        const titleEl = card.querySelector('h4');
+        const clone = titleEl?.cloneNode(true);
+        clone?.querySelector('.edm-finding-date')?.remove();
+        return clone?.textContent?.trim() || '';
+      })();
+    const fromTitle = title.match(/-\s*(.+)$/);
+    if (fromTitle?.[1]) return fromTitle[1].trim();
+
+    const snippet = getFindingSnippet(card);
+    const drug = snippet.match(/\b(Mounjaro|Wegovy|Ozempic|Saxenda|Rybelsus|Tirzepatide|Semaglutide|Liraglutide|Orlistat|Xenical)[^\s,]*/i);
+    return drug ? drug[0] : '';
+  }
+
+  function getCardDateVariants(card) {
+    const variants = new Set();
+    const push = (raw) => {
+      if (!raw) return;
+      const cleaned = String(raw)
+        .replace(/^(entered|prescribed|last issued|authorised(?:\s*\([^)]*\))?|recorded|onset|start date|ended|resolved)\s*:?\s*/i, '')
+        .trim();
+      if (!cleaned) return;
+      variants.add(cleaned);
+      variants.add(cleaned.replace(/\s+/g, '-'));
+      variants.add(cleaned.replace(/-/g, ' '));
+      const parsed = parseObservationDate(cleaned);
+      if (parsed && !Number.isNaN(parsed.getTime())) {
+        const day = parsed.getDate();
+        const mon = parsed.toLocaleDateString('en-GB', { month: 'short' });
+        const year = parsed.getFullYear();
+        variants.add(`${day} ${mon} ${year}`);
+        variants.add(`${day}-${mon}-${year}`);
+        variants.add(`${String(day).padStart(2, '0')}-${mon}-${year}`);
+        variants.add(`${String(day).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${year}`);
+      }
+    };
+
+    push(card.querySelector('.edm-finding-date')?.textContent);
+    extractDatesFromSnippet(getFindingSnippet(card)).forEach((entry) => push(entry.raw));
+    return [...variants].filter(Boolean);
+  }
+
+  function getSnippetSearchNeedles(snippet) {
+    const original = String(snippet || '').replace(/\s+/g, ' ').trim();
+    if (!original) return [];
+
+    let cleaned = original.replace(/^\.{2,}\s*/, '').replace(/\s*\.{2,}$/, '');
+    if (/^\.{2,}/.test(original) || /^[a-z0-9]{1,10}\b/i.test(cleaned) && original.startsWith('...')) {
+      cleaned = cleaned.replace(/^\S+\s+/, '');
+    }
+
+    const needles = [];
+    const add = (value) => {
+      const text = String(value || '').replace(/\s+/g, ' ').trim();
+      if (text.length >= 12) needles.push(text.slice(0, 90));
+    };
+
+    add(cleaned);
+    const entered = cleaned.match(/((?:Quantity\s+)?Prescribed\s+Elsewhere|Entered|Prescribed|Last issued|Authorised|Recorded)[:\s].{8,70}/i);
+    if (entered) add(entered[1]);
+    const dateChunk = cleaned.match(/(\d{1,2}[-\s][A-Za-z]{3,9}[-\s]\d{4}.{0,50})/);
+    if (dateChunk) add(dateChunk[1]);
+
+    return [...new Set(needles.map((n) => n.trim()).filter(Boolean))];
+  }
+
+  function findTextNodeMatch(root, needle) {
+    const target = normalizeFindText(needle);
+    if (!root || !target || target.length < 10) return null;
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let node;
+    let best = null;
+    let bestScore = -1;
+    while ((node = walker.nextNode())) {
+      const text = normalizeFindText(node.textContent);
+      if (!text || text.length < 8) continue;
+      if (!text.includes(target) && !target.includes(text)) continue;
+      const score = Math.min(text.length, target.length);
+      if (score > bestScore) {
+        bestScore = score;
+        best = node;
+      }
+    }
+    return best?.parentElement || null;
+  }
+
+  function findMarkByKeywordAndDate(root, keyword, dateVariants) {
+    if (!root || !keyword) return null;
+    const kw = normalizeFindText(keyword);
+    const marks = Array.from(root.querySelectorAll('mark[id^="finding-"]'));
+    const matched = marks.filter((mark) => normalizeFindText(mark.textContent).includes(kw));
+    if (!matched.length) return null;
+    if (matched.length === 1) return matched[0];
+
+    const dates = (dateVariants || []).map(normalizeFindText).filter(Boolean);
+    if (dates.length) {
+      for (const mark of matched) {
+        const row = getMedicationRowForMark(mark);
+        const rowText = normalizeFindText(row?.textContent || mark.parentElement?.textContent);
+        if (dates.some((date) => rowText.includes(date))) return mark;
+      }
+    }
+    return matched[0];
+  }
+
+  function resolveFindingTarget(card, findingIndex) {
+    const root = getFindingProseRoot();
+    if (!root) return null;
+
+    const byId = getFindingMark(findingIndex);
+    const keyword = getFindingKeyword(card);
+    if (byId) {
+      const markText = normalizeFindText(byId.textContent);
+      const kw = normalizeFindText(keyword);
+      if (!kw || markText.includes(kw) || kw.includes(markText)) return byId;
+    }
+
+    const dates = getCardDateVariants(card);
+    const byKeyword = findMarkByKeywordAndDate(root, keyword, dates);
+    if (byKeyword) return byKeyword;
+
+    for (const needle of getSnippetSearchNeedles(getFindingSnippet(card))) {
+      const hit = findTextNodeMatch(root, needle);
+      if (hit) return hit;
+    }
+
+    if (keyword) {
+      const soft = findTextNodeMatch(root, keyword);
+      if (soft) return soft;
+    }
+
+    return byId;
+  }
+
+  function pulseFindingTarget(target) {
+    if (!target || typeof target.animate !== 'function') return;
+    try {
+      target.animate(
+        [
+          { backgroundColor: '#dc2626', color: '#fff', offset: 0 },
+          { backgroundColor: '#fee2e2', color: '#dc2626', offset: 1 },
+        ],
+        { duration: 900, iterations: 2 },
+      );
+    } catch (_) {}
+  }
+
+  function highlightFindingTarget(target) {
+    clearFindingRowHighlights();
+    if (!target) return false;
+
+    const mark = target.closest?.('mark[id^="finding-"]') || (target.matches?.('mark[id^="finding-"]') ? target : null);
+    if (mark) mark.classList.add('edm-finding-mark-active');
+
+    const row = getMedicationRowForMark(mark || target) || target.closest?.('tr');
+    if (row) row.classList.add('edm-finding-row-active');
+
+    const scrollEl = row || mark || target;
+    try {
+      scrollEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (_) {
+      try { scrollEl.scrollIntoView(true); } catch (__) {}
+    }
+    pulseFindingTarget(mark || target);
+    return true;
   }
 
   function highlightFindingRow(findingIndex) {
-    clearFindingRowHighlights();
-    const row = getFindingMark(findingIndex)?.closest('tr');
-    if (row) row.classList.add('edm-finding-row-active');
+    const mark = getFindingMark(findingIndex);
+    highlightFindingTarget(mark);
+  }
+
+  function navigateToFindingCard(card) {
+    if (!card || card.hidden || card.dataset.edmDuplicateFinding === '1') return false;
+    const idx = getFindingIndex(card);
+    const target = resolveFindingTarget(card, idx);
+    return highlightFindingTarget(target);
   }
 
   function syncFindingCardDate(card) {
@@ -1335,7 +1537,13 @@
   }
 
   function enhanceFindingCards() {
-    document.querySelectorAll('#root .sticky.top-4 .bg-red-50.cursor-pointer').forEach((card) => {
+    const list = getFindingCardsList();
+    const cards = list
+      ? Array.from(list.querySelectorAll(':scope > .bg-red-50.cursor-pointer'))
+      : Array.from(document.querySelectorAll('#root .sticky.top-4 .bg-red-50.cursor-pointer'));
+
+    cards.forEach((card, index) => {
+      card.dataset.edmFindingIndex = String(index);
       syncFindingCardDate(card);
       compactFindingCardExcerpt(card);
 
@@ -1352,11 +1560,13 @@
         card.classList.add('edm-finding-card--active');
       };
 
-      card.addEventListener('click', () => {
+      card.addEventListener('click', (event) => {
+        if (event.target.closest('.edm-advice-btn')) return;
         activate();
-        const idx = getFindingIndex(card);
-        if (idx == null) return;
-        setTimeout(() => highlightFindingRow(idx), 450);
+        // Navigate ourselves — React's #finding-N lookup often misses early occurrences.
+        const go = () => navigateToFindingCard(card);
+        if (!go()) setTimeout(go, 120);
+        setTimeout(go, 450);
       });
       card.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -1370,15 +1580,14 @@
   }
 
   function enhanceFindingMarks() {
-    const root = document.querySelector('#root .prose');
+    const root = getFindingProseRoot();
     if (!root) return;
 
     root.querySelectorAll('mark[id^="finding-"]').forEach((mark) => {
       if (mark.dataset.edmMarkBound === '1') return;
       mark.dataset.edmMarkBound = '1';
       mark.addEventListener('click', () => {
-        const idx = parseInt(mark.id.replace('finding-', ''), 10);
-        if (!Number.isNaN(idx)) highlightFindingRow(idx);
+        highlightFindingTarget(mark);
       });
     });
   }
@@ -1431,13 +1640,33 @@
         chrome.tabs.query({ currentWindow: true }, (result) => resolve(result || []));
       });
       const rxTab = tabs.find((t) => /rx\.everydaymeds\.co\.uk\/order\//i.test(t.url || ''));
-      const scrTabIds = tabs
-        .filter((t) => t.id && (
+      const current = tabs.find((t) => t.active) || tabs.find((t) => /keywords-tool\.html/i.test(t.url || ''));
+      const ordered = tabs
+        .filter((t) => t.id && t.id !== rxTab?.id)
+        .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+      const currentUrl = current?.url || '';
+      let scrTabIds = [];
+      if (/\/app\/search_results(?:[/?#]|$)/i.test(currentUrl)) {
+        scrTabIds = current?.id ? [current.id] : [];
+      } else if (/keywords-tool\.html/i.test(currentUrl) && current?.id) {
+        scrTabIds = [current.id];
+        const index = ordered.findIndex((t) => t.id === current.id);
+        for (let i = index - 1; i >= 0; i -= 1) {
+          const candidate = ordered[i];
+          if (/nationalcarerecordsservice/i.test(candidate.url || '')) {
+            scrTabIds.push(candidate.id);
+            break;
+          }
+        }
+      } else {
+        const workflow = ordered.filter((t) =>
           /keywords-tool\.html/i.test(t.url || '')
-          || /portal\.spineservices\.nhs\.uk\/nationalcarerecordsservice/i.test(t.url || '')
-        ))
-        .map((t) => t.id)
-        .filter((id) => id !== rxTab?.id);
+          || /nationalcarerecordsservice/i.test(t.url || '')
+        );
+        scrTabIds = (workflow.length <= 1 ? workflow : workflow.slice(-2))
+          .map((t) => t.id)
+          .filter(Boolean);
+      }
       if (rxTab?.id) {
         await new Promise((resolve) => {
           chrome.tabs.update(rxTab.id, { active: true }, () => resolve());
